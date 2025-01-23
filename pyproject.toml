@@ -1,0 +1,23 @@
+[tool.poetry]
+name = "soliloquy"
+version = "0.1.0"
+description = "A CLI for managing a Python monorepo"
+authors = ["Jacob Stewart <jacob@swarmauri.com>"]
+license = "Apache2"
+
+[tool.poetry.dependencies]
+requests = "*"
+tomlkit = "*"
+toml = "*"
+packaging = "*"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.0.0"
+black = "^23.0.0"
+
+[tool.poetry.scripts]
+soliloquy = "soliloquy.cli:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"

@@ -1,10 +1,10 @@
 <p align="center">
     <a href="https://github.com/swarmauri/swarmauri-sdk/"><img src="https://res.cloudinary.com/dbjmpekvl/image/upload/v1730099724/Swarmauri-logo-lockup-2048x757_hww01w.png" alt="Swamauri Logo"/></a>
     <br />
-    <a href="https://hits.sh/github.com/swarmauri/monorepo_manager/"><img src="https://hits.sh/github.com/swarmauri/monorepo_manager.svg" alt="Hits"/></a>
+    <a href="https://hits.sh/github.com/swarmauri/soliloquy/"><img src="https://hits.sh/github.com/swarmauri/soliloquy.svg" alt="Hits"/></a>
     <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"/></a>
-    <a href="https://pypi.org/project/monorepo_manager/"><img src="https://img.shields.io/pypi/v/monorepo_manager?label=monorepo_manager" alt="PyPI - monorepo_manager Version"/></a>
-    <a href="https://pypi.org/project/monorepo_manager/"><img src="https://img.shields.io/pypi/dm/monorepo_manager?label=monorepo_manager%20Downloads" alt="PyPI - monorepo_manager Downloads"/></a>
+    <a href="https://pypi.org/project/soliloquy/"><img src="https://img.shields.io/pypi/v/soliloquy?label=soliloquy" alt="PyPI - soliloquy Version"/></a>
+    <a href="https://pypi.org/project/soliloquy/"><img src="https://img.shields.io/pypi/dm/soliloquy?label=soliloquy%20Downloads" alt="PyPI - soliloquy Downloads"/></a>
     <br />
     <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&labelColor=black" alt="Python"/>
 </p>
@@ -171,7 +171,7 @@ monorepo-manager pyproject --pyproject ./packages/package1/pyproject.toml --upda
 
 ## Workflow Example in GitHub Actions
 
-Here's an example GitHub Actions workflow that uses **monorepo_manager** to lock, build, install, test, bump the patch version, and publish:
+Here's an example GitHub Actions workflow that uses **soliloquy** to lock, build, install, test, bump the patch version, and publish:
 
 ```yaml
 name: Release Workflow
@@ -194,8 +194,8 @@ jobs:
         with:
           python-version: '3.9'
 
-      - name: Install monorepo_manager Tools
-        run: pip install "monorepo_manager@git+https://github.com/swarmauri/monorepo_manager.git@master"
+      - name: Install soliloquy Tools
+        run: pip install "soliloquy@git+https://github.com/swarmauri/soliloquy.git@master"
 
       - name: Lock Dependencies
         run: monorepo-manager lock --directory .
@@ -224,7 +224,7 @@ jobs:
 ### Project Structure
 
 ```
-monorepo_manager/
+soliloquy/
 ├── __init__.py
 ├── cli.py            # Main CLI entry point
 ├── poetry_ops.py     # Poetry operations (lock, install, build, publish, run tests, etc.)

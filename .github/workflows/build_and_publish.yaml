@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        pkg-dir: [pkgs/crouton, pkgs/crouton_client]  # Specify the directories for each package
+        pkg-dir: [.]  # Specify the directories for each package
 
     steps:
       - name: Checkout the repository
@@ -65,5 +65,5 @@ jobs:
         uses: pypa/gh-action-pypi-publish@v1.4.2
         with:
           user: __token__
-          password: ${{ matrix.pkg-dir == 'pkgs/crouton' && secrets.POETRY_PYPI_CROUTON_API_TOKEN || secrets.POETRY_PYPI_CROUTON_CLIENT_API_TOKEN }}
+          password: ${{ secrets.SOLILOQUY_PYPI_TOKEN }}
           packages_dir: ${{ matrix.pkg-dir }}/dist

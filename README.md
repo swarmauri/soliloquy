@@ -10,9 +10,9 @@
 </p>
 
 
-# Monorepo Manager
+# Soliloquy
 
-**Monorepo Manager** is a unified command-line tool for managing a Python monorepo that contains multiple standalone packages—each with its own `pyproject.toml`. It consolidates common tasks such as dependency management, version bumping, remote dependency resolution, test execution and analysis, and project configuration updates into one robust CLI.
+**Soliloquy** is a unified command-line tool for managing a Python monorepo that contains multiple standalone packages—each with its own `pyproject.toml`. It consolidates common tasks such as dependency management, version bumping, remote dependency resolution, test execution and analysis, and project configuration updates into one robust CLI.
 
 ## Features
 
@@ -43,17 +43,17 @@
 Install via pip:
 
 ```bash
-pip install monorepo-manager
+pip install soliloquy
 ```
 
-_This command installs the `monorepo-manager` CLI, which is provided via the entry point `monorepo-manager`, into your system PATH._
+_This command installs the `soliloquy` CLI, which is provided via the entry point `soliloquy`, into your system PATH._
 
 ## Usage
 
 After installation, run the following command to see a list of available commands:
 
 ```bash
-monorepo-manager --help
+soliloquy --help
 ```
 
 ### Command Examples
@@ -64,10 +64,10 @@ Generate a `poetry.lock` file by specifying either a directory or a file path co
 
 ```bash
 # Lock using a directory:
-monorepo-manager lock --directory ./packages/package1
+soliloquy lock --directory ./packages/package1
 
 # Lock using an explicit pyproject.toml file:
-monorepo-manager lock --file ./packages/package1/pyproject.toml
+soliloquy lock --file ./packages/package1/pyproject.toml
 ```
 
 #### 2. Install Dependencies
@@ -76,19 +76,19 @@ Install dependencies with options for extras and including development dependenc
 
 ```bash
 # Basic installation:
-monorepo-manager install --directory ./packages/package1
+soliloquy install --directory ./packages/package1
 
 # Using an explicit pyproject.toml file:
-monorepo-manager install --file ./packages/package1/pyproject.toml
+soliloquy install --file ./packages/package1/pyproject.toml
 
 # Install including development dependencies:
-monorepo-manager install --directory ./packages/package1 --dev
+soliloquy install --directory ./packages/package1 --dev
 
 # Install including extras (e.g., extras named "full"):
-monorepo-manager install --directory ./packages/package2 --extras full
+soliloquy install --directory ./packages/package2 --extras full
 
 # Install including all extras:
-monorepo-manager install --directory ./packages/package2 --all-extras
+soliloquy install --directory ./packages/package2 --all-extras
 ```
 
 #### 3. Build Packages
@@ -97,10 +97,10 @@ Recursively build packages based on their local dependency paths defined in thei
 
 ```bash
 # Build packages using a directory containing a master pyproject.toml:
-monorepo-manager build --directory .
+soliloquy build --directory .
 
 # Build packages using an explicit pyproject.toml file:
-monorepo-manager build --file ./packages/package1/pyproject.toml
+soliloquy build --file ./packages/package1/pyproject.toml
 ```
 
 #### 4. Version Management
@@ -109,13 +109,13 @@ Bump or explicitly set the version in a package's `pyproject.toml`:
 
 ```bash
 # Bump the patch version (e.g., from 1.2.3.dev1 to 1.2.3.dev2):
-monorepo-manager version ./packages/package1/pyproject.toml --bump patch
+soliloquy version ./packages/package1/pyproject.toml --bump patch
 
 # Finalize a development version (remove the .dev suffix):
-monorepo-manager version ./packages/package1/pyproject.toml --bump finalize
+soliloquy version ./packages/package1/pyproject.toml --bump finalize
 
 # Set an explicit version:
-monorepo-manager version ./packages/package1/pyproject.toml --set 2.0.0.dev1
+soliloquy version ./packages/package1/pyproject.toml --set 2.0.0.dev1
 ```
 
 #### 5. Remote Operations
@@ -124,11 +124,11 @@ Fetch remote version information and update your local dependency configuration:
 
 ```bash
 # Fetch the version from a remote GitHub repository's pyproject.toml:
-monorepo-manager remote fetch --git-url https://github.com/YourOrg/YourRepo.git --branch main --subdir "src/"
+soliloquy remote fetch --git-url https://github.com/YourOrg/YourRepo.git --branch main --subdir "src/"
 
 # Update a local pyproject.toml with remote-resolved versions:
 # (If --output is omitted, the input file is overwritten.)
-monorepo-manager remote update --input ./packages/package1/pyproject.toml --output ./packages/package1/pyproject.updated.toml
+soliloquy remote update --input ./packages/package1/pyproject.toml --output ./packages/package1/pyproject.updated.toml
 ```
 
 #### 6. Testing and Analysis
@@ -140,10 +140,10 @@ Run your tests using pytest and analyze test results from a JSON report:
 
   ```bash
   # Run tests sequentially:
-  monorepo-manager test --directory ./tests
+  soliloquy test --directory ./tests
   
   # Run tests in parallel using 4 workers:
-  monorepo-manager test --directory ./tests --num-workers 4
+  soliloquy test --directory ./tests --num-workers 4
   ```
 
 - **Analyze Test Results:**  
@@ -151,10 +151,10 @@ Run your tests using pytest and analyze test results from a JSON report:
 
   ```bash
   # Analyze test results without thresholds:
-  monorepo-manager analyze test-results.json
+  soliloquy analyze test-results.json
 
   # Analyze test results with thresholds (e.g., passed tests > 75% and skipped tests < 20%):
-  monorepo-manager analyze test-results.json --required-passed gt:75 --required-skipped lt:20
+  soliloquy analyze test-results.json --required-passed gt:75 --required-skipped lt:20
   ```
 
 #### 7. Pyproject Operations
@@ -163,10 +163,10 @@ Extract and update dependency information from a `pyproject.toml` file:
 
 ```bash
 # Extract local (path) and Git-based dependencies:
-monorepo-manager pyproject --pyproject ./packages/package1/pyproject.toml
+soliloquy pyproject --pyproject ./packages/package1/pyproject.toml
 
 # Update local dependency versions to 2.0.0 (updates the parent file and, if possible, each dependency's own pyproject.toml):
-monorepo-manager pyproject --pyproject ./packages/package1/pyproject.toml --update-version 2.0.0
+soliloquy pyproject --pyproject ./packages/package1/pyproject.toml --update-version 2.0.0
 ```
 
 ## Workflow Example in GitHub Actions
@@ -198,25 +198,25 @@ jobs:
         run: pip install "soliloquy@git+https://github.com/swarmauri/soliloquy.git@master"
 
       - name: Lock Dependencies
-        run: monorepo-manager lock --directory .
+        run: soliloquy lock --directory .
 
       - name: Build Packages
-        run: monorepo-manager build --directory .
+        run: soliloquy build --directory .
 
       - name: Install Dependencies
-        run: monorepo-manager install --directory .
+        run: soliloquy install --directory .
 
       - name: Run Tests
-        run: monorepo-manager test --directory ./tests --num-workers 4
+        run: soliloquy test --directory ./tests --num-workers 4
 
       - name: Bump Patch Version
-        run: monorepo-manager version ./packages/package1/pyproject.toml --bump patch
+        run: soliloquy version ./packages/package1/pyproject.toml --bump patch
 
       - name: Publish Packages
         env:
           PYPI_USERNAME: ${{ secrets.PYPI_USERNAME }}
           PYPI_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-        run: monorepo-manager publish --directory . --username "$PYPI_USERNAME" --password "$PYPI_PASSWORD"
+        run: soliloquy publish --directory . --username "$PYPI_USERNAME" --password "$PYPI_PASSWORD"
 ```
 
 ## Development

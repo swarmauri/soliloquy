@@ -1,4 +1,4 @@
-# monorepo_manager/__init__.py
+# soliloquy/__init__.py
 
 try:
     # For Python 3.8 and newer
@@ -8,7 +8,7 @@ except ImportError:
     from importlib_metadata import version, PackageNotFoundError
 
 try:
-    __version__ = version("monorepo-manager")
+    __version__ = version("soliloquy")
 except PackageNotFoundError:
     # If the package is not installed (for example, during development)
     __version__ = "0.0.0"

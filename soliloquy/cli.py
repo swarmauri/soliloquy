@@ -19,11 +19,11 @@ import argparse
 import sys
 
 # Import operations from the local modules.
-from monorepo_manager import poetry_ops
-from monorepo_manager import version_ops
-from monorepo_manager import remote_ops
-from monorepo_manager import test_ops
-from monorepo_manager import pyproject_ops
+from soliloquy import poetry_ops
+from soliloquy import version_ops
+from soliloquy import remote_ops
+from soliloquy import test_ops
+from soliloquy import pyproject_ops
 
 
 def main():

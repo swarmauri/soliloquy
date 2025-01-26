@@ -134,10 +134,12 @@ def poetry_ruff_lint(directory=".", fix=False):
 def build_monorepo(file: str):
     """
     Build a monorepo aggregator pyproject.toml that has 'package-mode=false'
-    in [tool.poetry], plus any local path and Git dependencies.
-
+    in [tool.poetry], plus any local path dependencies and Git dependencies.
+    
     :param file: Path to the monorepo aggregator pyproject.toml.
     """
+    import tomlkit
+
     if not file or not os.path.isfile(file):
         raise FileNotFoundError(f"Monorepo file not found: {file}")
 
@@ -153,40 +155,54 @@ def build_monorepo(file: str):
 
     # Base directory of the monorepo
     base_dir = os.path.dirname(os.path.abspath(file))
+    print(f"Base directory set to: {base_dir}")
 
     # Step 1: Build path dependencies
     path_deps = extract_path_dependencies(file)
     print(f"Found {len(path_deps)} path dependencies in aggregator {file}.")
 
     for dep in path_deps:
-        full_path = os.path.join(base_dir, dep)
+        normalized_dep = os.path.normpath(dep)
+        full_path = os.path.join(base_dir, normalized_dep)
         sub_pyproj = os.path.join(full_path, "pyproject.toml")
-        if os.path.isdir(full_path) and os.path.isfile(sub_pyproj):
-            print(f"Building local path dependency: {full_path}")
-            try:
-                run_command(["poetry", "build"], cwd=full_path)
-            except Exception as e:
-                print(f"Failed to build path dependency {full_path}: {e}", file=sys.stderr)
+        print(f"Processing path dependency: {dep} -> {full_path}")
+
+        if os.path.isdir(full_path):
+            if os.path.isfile(sub_pyproj):
+                print(f"Building local path dependency: {full_path}")
+                try:
+                    run_command(["poetry", "build"], cwd=full_path)
+                except Exception as e:
+                    print(f"Failed to build path dependency {full_path}: {e}", file=sys.stderr)
+            else:
+                print(f"Skipping {full_path}: 'pyproject.toml' not found.")
         else:
-            print(f"Skipping {full_path}: not a valid local package directory.")
+            print(f"Skipping {full_path}: directory does not exist.")
 
     # Step 2: Build Git dependencies
     git_deps = extract_git_dependencies(file)
     if git_deps:
         print(f"Found {len(git_deps)} Git dependencies in aggregator {file}.")
 
+        # Extract subdirectories from Git dependencies
         list_of_subdirs = [git_deps[pkg].get('subdirectory', '.') for pkg in git_deps]
         for subdir in list_of_subdirs:
-            full_subdir_path = os.path.join(base_dir, subdir)
+            normalized_subdir = os.path.normpath(subdir)
+            full_subdir_path = os.path.join(base_dir, normalized_subdir)
             sub_pyproj = os.path.join(full_subdir_path, "pyproject.toml")
-            if os.path.isdir(full_subdir_path) and os.path.isfile(sub_pyproj):
-                print(f"Building Git dependency package: {full_subdir_path}")
-                try:
-                    run_command(["poetry", "build"], cwd=full_subdir_path)
-                except Exception as e:
-                    print(f"Failed to build Git dependency {full_subdir_path}: {e}", file=sys.stderr)
+            print(f"Processing Git dependency subdirectory: {subdir} -> {full_subdir_path}")
+
+            if os.path.isdir(full_subdir_path):
+                if os.path.isfile(sub_pyproj):
+                    print(f"Building Git dependency package: {full_subdir_path}")
+                    try:
+                        run_command(["poetry", "build"], cwd=full_subdir_path)
+                    except Exception as e:
+                        print(f"Failed to build Git dependency {full_subdir_path}: {e}", file=sys.stderr)
+                else:
+                    print(f"Skipping {full_subdir_path}: 'pyproject.toml' not found.")
             else:
-                print(f"Skipping Git dependency subdir {full_subdir_path}: not a valid package directory.")
+                print(f"Skipping {full_subdir_path}: directory does not exist.")
     else:
         print("No Git dependencies found in aggregator.")
 

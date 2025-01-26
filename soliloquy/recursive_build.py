@@ -2,8 +2,7 @@ import os
 import sys
 import tomlkit
 from .poetry_ops import run_command
-from .pyproject_ops import extract_path_dependencies, extract_git_dependencies
-from .poetry_ops import find_pyproject_files
+from .pyproject_ops import extract_path_dependencies, extract_git_dependencies, find_pyproject_files
 
 def recursive_build(file: str = None, directory: str = None, recursive: bool = False):
     """

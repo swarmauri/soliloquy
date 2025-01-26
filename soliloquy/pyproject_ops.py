@@ -120,3 +120,48 @@ def update_dependency_versions(pyproject_path, new_version):
     except Exception as e:
         print(f"Error writing updated file {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
+
+
+def find_pyproject_files(
+    file: str = None,
+    directory: str = None,
+    recursive: bool = False,
+    default_filename: str = "pyproject.toml"
+) -> List[str]:
+    """
+    Resolve which pyproject.toml file(s) to operate on.
+
+    1. If 'file' is provided, return just that file.
+    2. Else if 'directory' is provided:
+       - If 'recursive' is True, walk subdirs for default_filename.
+       - Otherwise, just look for default_filename in that one directory.
+    3. Otherwise, raise an error.
+    """
+    if file:
+        path = os.path.abspath(file)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"File not found: {path}")
+        return [path]
+
+    if directory:
+        dir_path = os.path.abspath(directory)
+        if not os.path.isdir(dir_path):
+            raise NotADirectoryError(f"Directory not found: {dir_path}")
+
+        if recursive:
+            matched = []
+            for root, dirs, files in os.walk(dir_path):
+                if default_filename in files:
+                    matched.append(os.path.join(root, default_filename))
+            if not matched:
+                raise FileNotFoundError(
+                    f"No {default_filename} found recursively in {dir_path}"
+                )
+            return matched
+        else:
+            single = os.path.join(dir_path, default_filename)
+            if not os.path.isfile(single):
+                raise FileNotFoundError(f"No {default_filename} in {dir_path}")
+            return [single]
+
+    raise ValueError("Must provide either `file` or `directory`.")

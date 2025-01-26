@@ -5,6 +5,7 @@ pyproject_ops.py
 - Now uses tomlkit instead of toml
 """
 
+from typing import List
 import os
 import sys
 import tomlkit

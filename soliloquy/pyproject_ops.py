@@ -25,8 +25,6 @@ def extract_path_dependencies(pyproject_path):
             path_deps.append(val["path"])
     return path_deps
 
-
-
 def extract_git_dependencies(pyproject_path):
     """
     Extract Git-based dependencies from a pyproject.toml file.
@@ -53,7 +51,6 @@ def extract_git_dependencies(pyproject_path):
         if isinstance(details, dict) and "git" in details
     }
     return git_deps
-
 
 def update_dependency_versions(pyproject_path, new_version):
     """

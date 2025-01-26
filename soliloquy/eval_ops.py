@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-test_ops.py
+eval_ops.py
 
 Provides functions to analyze test result data from a JSON file.
 
@@ -22,29 +22,6 @@ import json
 import sys
 from collections import defaultdict
 import argparse
-
-
-def parse_arguments(args):
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(description="Analyze test results from a JSON file.")
-    parser.add_argument("file", help="Path to the JSON file containing test results")
-    parser.add_argument(
-        "--required-passed",
-        type=str,
-        help=(
-            "Required passed percentage threshold (e.g., 'gt:50', 'lt:30', 'eq:50', "
-            "'ge:50', 'le:50')"
-        ),
-    )
-    parser.add_argument(
-        "--required-skipped",
-        type=str,
-        help=(
-            "Required skipped percentage threshold (e.g., 'gt:20', 'lt:50', 'eq:50', "
-            "'ge:50', 'le:50')"
-        ),
-    )
-    return parser.parse_args(args)
 
 
 def evaluate_threshold(value, threshold):

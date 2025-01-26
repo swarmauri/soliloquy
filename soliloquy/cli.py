@@ -18,7 +18,7 @@ from typing import List
 from soliloquy import poetry_ops
 from soliloquy import version_ops
 from soliloquy import remote_ops
-from soliloquy import test_ops
+from soliloquy import eval_ops
 from soliloquy import pyproject_ops
 
 
@@ -123,7 +123,6 @@ def handle_build_pkg(args):
     except Exception as e:
         print(f"Error in build pkg command: {e}", file=sys.stderr)
         sys.exit(1)
-
 
 def handle_build_mono(args):
     """

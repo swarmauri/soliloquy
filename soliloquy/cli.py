@@ -212,6 +212,19 @@ def handle_publish(args):
         print(f"Error in publish command: {e}", file=sys.stderr)
         sys.exit(1)
 
+def handle_lint(args):
+    """
+    Dispatch linting tasks to poetry_ops.poetry_ruff_lint.
+    """
+    try:
+        # If the user provided -d/--dir, we'll pass that to poetry_ruff_lint
+        directory = args.dir or "."
+        poetry_ops.poetry_ruff_lint(directory=directory, fix=args.fix)
+    except Exception as e:
+        print(f"Error in lint command: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
 #------------------------------------------------------------------------------
 # Main Entry Point with Subparser & Command Mapping
 #------------------------------------------------------------------------------
@@ -290,6 +303,16 @@ def main():
     publish_parser.add_argument("--username", type=str, help="PyPI username")
     publish_parser.add_argument("--password", type=str, help="PyPI password")
 
+
+    # --------------------------------------------------
+    # lint
+    # --------------------------------------------------
+    lint_parser = subparsers.add_parser("lint", help="Run Ruff lint checks (and optionally autofix).")
+    lint_parser.add_argument("-d", "--dir", type=str,
+                             help="Directory to lint (default: current directory).")
+    lint_parser.add_argument("--fix", action="store_true",
+                             help="Apply autofixes using 'ruff check --fix'.")
+
     # Map subcommands to handler functions
     COMMANDS = {
         "lock": handle_lock,
@@ -301,6 +324,7 @@ def main():
         "analyze": handle_analyze,
         "pyproject": handle_pyproject,
         "publish": handle_publish,
+        "lint": handle_lint
     }
 
     args = parser.parse_args()

@@ -159,6 +159,22 @@ def find_pyproject_files(
     raise ValueError("Must provide either `file` or `directory`.")
 
 
+def poetry_ruff_lint(directory=".", fix=False):
+    """
+    Runs Ruff lint checks in the specified directory.
+    If fix=True, also pass --fix to autofix issues.
+    
+    :param directory: The directory to lint (defaults to '.')
+    :param fix: Whether to run with --fix (autofixing) enabled.
+    """
+    # Construct the base command: 'poetry run ruff check <dir>'
+    command = ["poetry", "run", "ruff", "check", directory]
+    if fix:
+        command.append("--fix")
+
+    print(f"Running Ruff on '{directory}' (fix={fix})...")
+    run_command(command)
+
 def poetry_publish(
     file: str = None,
     directory: str = None,

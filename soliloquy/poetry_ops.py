@@ -7,11 +7,12 @@ Key changes:
   - run_command now uses shell=False and an array of arguments
   - If reading/writing pyproject, switch to tomlkit (if needed)
 """
-
+from typing import List
 import os
 import subprocess
 import sys
-import tomlkit  # <--- Instead of "import toml"
+import tomlkit
+
 
 def run_command(command_args, cwd=None):
     """

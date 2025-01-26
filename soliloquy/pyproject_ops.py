@@ -40,7 +40,7 @@ def extract_git_dependencies(pyproject_path):
     """
     try:
         with open(pyproject_path, "r") as f:
-            data = tomlki.load(f)
+            data = tomlkit.load(f)
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -72,7 +72,7 @@ def update_dependency_versions(pyproject_path, new_version):
     """
     try:
         with open(pyproject_path, "r") as f:
-            data = tomlki.load(f)
+            data = tomlkit.load(f)
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -98,11 +98,11 @@ def update_dependency_versions(pyproject_path, new_version):
             if os.path.isfile(dependency_pyproject):
                 try:
                     with open(dependency_pyproject, "r") as dep_file:
-                        dep_data = tomlki.load(dep_file)
+                        dep_data = tomlkit.load(dep_file)
                     if "tool" in dep_data and "poetry" in dep_data["tool"]:
                         dep_data["tool"]["poetry"]["version"] = new_version
                         with open(dependency_pyproject, "w") as dep_file:
-                            tomlki.dump(dep_data, dep_file)
+                            tomlkit.dump(dep_data, dep_file)
                         print(f"Updated {dependency_pyproject} to version {new_version}")
                     else:
                         print(f"Invalid structure in {dependency_pyproject}", file=sys.stderr)
@@ -115,7 +115,7 @@ def update_dependency_versions(pyproject_path, new_version):
     data["tool"]["poetry"]["dependencies"] = updated_deps
     try:
         with open(pyproject_path, "w") as f:
-            toml.dump(data, f)
+            tomlkit.dump(data, f)
         print(f"Updated dependency versions in {pyproject_path}")
     except Exception as e:
         print(f"Error writing updated file {pyproject_path}: {e}", file=sys.stderr)

@@ -4,6 +4,7 @@ import os
 import tempfile
 import shutil
 import pytest
+import subprocess
 from unittest import mock
 from soliloquy import poetry_ops
 from soliloquy.pyproject_ops import find_pyproject_files

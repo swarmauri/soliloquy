@@ -189,7 +189,7 @@ def handle_test(args):
 
 def handle_analyze(args):
     try:
-        test_ops.analyze_test_file(
+        eval_ops.analyze_test_file(
             file_path=args.file,
             required_passed=args.required_passed,
             required_skipped=args.required_skipped

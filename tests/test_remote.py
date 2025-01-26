@@ -5,6 +5,7 @@ import json
 import tempfile
 import shutil
 import pytest
+import requests
 from unittest import mock
 from soliloquy import remote_ops
 from tomlkit import parse, dumps

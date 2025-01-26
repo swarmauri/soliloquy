@@ -12,7 +12,7 @@ import os
 import subprocess
 import sys
 import tomlkit
-
+from .pyproject_ops import extract_path_dependencies, extract_git_dependencies, find_pyproject_files
 
 def run_command(command_args, cwd=None):
     """
@@ -174,6 +174,68 @@ def poetry_ruff_lint(directory=".", fix=False):
 
     print(f"Running Ruff on '{directory}' (fix={fix})...")
     run_command(command)
+
+
+def build_monorepo(file: str):
+    """
+    Build a monorepo aggregator pyproject.toml that has 'package-mode=false'
+    in [tool.poetry], plus any local path and Git dependencies.
+
+    :param file: Path to the monorepo aggregator pyproject.toml.
+    """
+    if not file or not os.path.isfile(file):
+        raise FileNotFoundError(f"Monorepo file not found: {file}")
+
+    print(f"Building monorepo aggregator from {file}")
+
+    with open(file, "r", encoding="utf-8") as f:
+        doc = tomlkit.parse(f.read())
+
+    tool_poetry = doc.get("tool", {}).get("poetry", {})
+    pkg_mode = tool_poetry.get("package-mode", True)  # default to True
+    if pkg_mode is not False:
+        print("Warning: This file doesn't specify package-mode=false. Continuing anyway...")
+
+    # Base directory of the monorepo
+    base_dir = os.path.dirname(os.path.abspath(file))
+
+    # Step 1: Build path dependencies
+    path_deps = extract_path_dependencies(file)
+    print(f"Found {len(path_deps)} path dependencies in aggregator {file}.")
+
+    for dep in path_deps:
+        full_path = os.path.join(base_dir, dep)
+        sub_pyproj = os.path.join(full_path, "pyproject.toml")
+        if os.path.isdir(full_path) and os.path.isfile(sub_pyproj):
+            print(f"Building local path dependency: {full_path}")
+            try:
+                run_command(["poetry", "build"], cwd=full_path)
+            except Exception as e:
+                print(f"Failed to build path dependency {full_path}: {e}", file=sys.stderr)
+        else:
+            print(f"Skipping {full_path}: not a valid local package directory.")
+
+    # Step 2: Build Git dependencies
+    git_deps = extract_git_dependencies(file)
+    if git_deps:
+        print(f"Found {len(git_deps)} Git dependencies in aggregator {file}.")
+
+        list_of_subdirs = [git_deps[pkg].get('subdirectory', '.') for pkg in git_deps]
+        for subdir in list_of_subdirs:
+            full_subdir_path = os.path.join(base_dir, subdir)
+            sub_pyproj = os.path.join(full_subdir_path, "pyproject.toml")
+            if os.path.isdir(full_subdir_path) and os.path.isfile(sub_pyproj):
+                print(f"Building Git dependency package: {full_subdir_path}")
+                try:
+                    run_command(["poetry", "build"], cwd=full_subdir_path)
+                except Exception as e:
+                    print(f"Failed to build Git dependency {full_subdir_path}: {e}", file=sys.stderr)
+            else:
+                print(f"Skipping Git dependency subdir {full_subdir_path}: not a valid package directory.")
+    else:
+        print("No Git dependencies found in aggregator.")
+
+    print("Monorepo build completed.")
 
 def poetry_publish(
     file: str = None,

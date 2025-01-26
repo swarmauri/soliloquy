@@ -98,13 +98,45 @@ def handle_install(args):
 
 
 def handle_build(args):
+    # We see which sub-subcommand was chosen
+    if args.build_cmd == "pkg":
+        handle_build_pkg(args)
+    elif args.build_cmd == "mono":
+        handle_build_mono(args)
+    else:
+        print("Unknown build subcommand:", args.build_cmd)
+        sys.exit(1)
+
+def handle_build_pkg(args):
+    """
+    Handles 'cli build pkg' logic.
+    Supports -f, -d, and optional -R.
+    """
+    from soliloquy import poetry_ops
     try:
-        targets = resolve_targets(args.dir, args.file, args.recursive)
-        for t in targets:
-            location = os.path.dirname(t)
-            poetry_ops.recursive_build(location)
+        # This calls your existing "recursive_build" or a variation of it.
+        poetry_ops.recursive_build(
+            file=args.file,
+            directory=args.dir,
+            recursive=args.recursive
+        )
     except Exception as e:
-        print(f"Error in build command: {e}", file=sys.stderr)
+        print(f"Error in build pkg command: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def handle_build_mono(args):
+    """
+    Handles 'cli build mono' logic.
+    Only supports -f (i.e., a single aggregator pyproject).
+    """
+    from soliloquy import poetry_ops
+    try:
+        # This calls a specialized function for monorepo aggregator building,
+        # or reuses the same function if you'd like but with some constraints.
+        poetry_ops.build_monorepo(file=args.file)
+    except Exception as e:
+        print(f"Error in build mono command: {e}", file=sys.stderr)
         sys.exit(1)
 
 
@@ -250,11 +282,27 @@ def main():
     install_parser.add_argument("--dev", action="store_true", help="Include dev dependencies")
     install_parser.add_argument("--all-extras", action="store_true", help="Include all extras")
     
+    #-----------------------------------------------------------------
     # build
-    build_parser = subparsers.add_parser("build", help="Build packages recursively based on path dependencies")
-    build_parser.add_argument("-d", "--dir", type=str, help="Directory containing pyproject.toml")
-    build_parser.add_argument("-f", "--file", type=str, help="Explicit path to a pyproject.toml file")
-    build_parser.add_argument("-R", "--recursive", action="store_true", help="Recursively find pyproject.toml files")
+    #-----------------------------------------------------------------
+    build_parser = subparsers.add_parser("build", help="Build packages")
+    build_subparsers = build_parser.add_subparsers(dest="build_cmd", required=True)
+
+    # build pkg
+    pkg_parser = build_subparsers.add_parser("pkg", help="Build a single or multiple packages")
+    pkg_parser.add_argument("-f", "--file", type=str, help="Path to a pyproject.toml")
+    pkg_parser.add_argument("-d", "--dir", type=str, help="Directory containing pyproject.toml(s)")
+    pkg_parser.add_argument("-R", "--recursive", action="store_true",
+                            help="Recursively find pyproject.toml files in directory mode")
+    # The function that handles 'build pkg'
+    pkg_parser.set_defaults(func=handle_build_pkg)
+
+    # build mono
+    mono_parser = build_subparsers.add_parser("mono", help="Build monorepo aggregator only (requires -f).")
+    mono_parser.add_argument("-f", "--file", type=str, required=True,
+                             help="Path to a monorepo aggregator pyproject.toml (with package-mode=false)")
+    # The function that handles 'build mono'
+    mono_parser.set_defaults(func=handle_build_mono)
     
     # version
     version_parser = subparsers.add_parser("version", help="Bump or set package version")

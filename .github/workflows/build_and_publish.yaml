@@ -57,7 +57,7 @@ jobs:
       - name: Run tests
         run: |
           cd ${{ matrix.pkg-dir }}
-          poetry run pytest -v tests --junitxml=results.xml
+          poetry run pytest -vvv tests --junitxml=results.xml
         continue-on-error: true
 
       - name: Publish to PyPI

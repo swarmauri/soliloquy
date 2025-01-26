@@ -2,217 +2,209 @@
 """
 poetry_ops.py
 
-Provides functions to:
-  - Install Poetry
-  - Run 'poetry lock' and 'poetry install'
-  - Extract path dependencies from pyproject.toml
-  - Recursively build packages (based on the dependencies)
-  - Show the installed packages (via pip freeze)
-  - Set versions and dependency versions in pyproject.toml files
-  - Publish built packages to PyPI
-  - Publish packages based on path dependencies
-
-Intended for use in a unified monorepo management CLI.
+Key changes:
+  - Removed install_poetry()
+  - run_command now uses shell=False and an array of arguments
+  - If reading/writing pyproject, switch to tomlkit (if needed)
 """
 
-import argparse
 import os
 import subprocess
 import sys
-import toml
+import tomlkit  # <--- Instead of "import toml"
 
-
-def run_command(command, cwd=None):
-    """Run a shell command and handle errors."""
+def run_command(command_args, cwd=None):
+    """
+    Run a shell command (as a list of args) with shell=False,
+    capturing output. Raises CalledProcessError on failure.
+    """
     try:
         result = subprocess.run(
-            command,
+            command_args,
             cwd=cwd,
             text=True,
             capture_output=True,
-            shell=True,
+            shell=False,
             check=True,
         )
         if result.stdout:
-            print(result.stdout)
+            print(result.stdout, end="")
         return result.stdout.strip()
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e.stderr}", file=sys.stderr)
         sys.exit(e.returncode)
 
 
-def install_poetry():
-    """Install Poetry."""
-    print("Installing Poetry...")
-    run_command("curl -sSL https://install.python-poetry.org | python3")
-    # Update PATH so that ~/.local/bin is included for subsequent commands.
-    os.environ["PATH"] = f"{os.path.expanduser('~')}/.local/bin:{os.environ.get('PATH', '')}"
-
-
-def poetry_lock(directory=None, file=None):
+def poetry_lock(location):
     """
-    Run 'poetry lock' in the specified directory or on the specified file's directory.
-    
-    :param directory: Directory containing pyproject.toml.
-    :param file: Path to a specific pyproject.toml file.
+    Run 'poetry lock' in the specified location (directory).
     """
-    location = directory if directory else os.path.dirname(file)
     print(f"Generating poetry.lock in {location}...")
-    run_command("poetry lock", cwd=location)
+    run_command(["poetry", "lock"], cwd=location)
 
 
-def poetry_install(directory=None, file=None, extras=None, with_dev=False, all_extras=False):
+def poetry_install(location, extras=None, with_dev=False, all_extras=False):
     """
-    Run 'poetry install' in the specified directory or file.
-    
-    :param directory: Directory containing pyproject.toml.
-    :param file: Path to a specific pyproject.toml file.
-    :param extras: Extras to include (e.g., "full").
-    :param with_dev: Boolean flag to include dev dependencies.
-    :param all_extras: Boolean flag to include all extras.
+    Run 'poetry install' in the specified location.
     """
-    location = directory if directory else os.path.dirname(file)
     print(f"Installing dependencies in {location}...")
     command = ["poetry", "install", "--no-cache", "-vv"]
     if all_extras:
         command.append("--all-extras")
     elif extras:
-        command.append(f"--extras {extras}")
+        command.extend(["--extras", extras])
     if with_dev:
-        command.append("--with dev")
-    run_command(" ".join(command), cwd=location)
+        command.extend(["--with", "dev"])
+    run_command(command, cwd=location)
 
 
 def extract_path_dependencies(pyproject_path):
     """
-    Extract path dependencies from a pyproject.toml file.
-    
-    Looks for dependency entries that are defined as tables with a "path" key.
-    
-    :param pyproject_path: Path to the pyproject.toml file.
-    :return: List of dependency paths found.
+    Example reading with tomlkit instead of toml.
     """
     print(f"Extracting path dependencies from {pyproject_path}...")
     try:
-        with open(pyproject_path, "r") as f:
-            data = toml.load(f)
+        with open(pyproject_path, "r", encoding="utf-8") as f:
+            doc = tomlkit.parse(f.read())
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    dependencies = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-    path_deps = [v["path"] for v in dependencies.values() if isinstance(v, dict) and "path" in v]
+    deps = doc.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    path_deps = [
+        v["path"]
+        for v in deps.values()
+        if isinstance(v, dict) and "path" in v
+    ]
     return path_deps
 
 
-def recursive_build(directory=None, file=None):
+def recursive_build(location):
     """
     Recursively build packages based on path dependencies extracted from a pyproject.toml.
-    
-    :param directory: Directory containing pyproject.toml.
-    :param file: Specific pyproject.toml file to use.
     """
-    pyproject_path = file if file else os.path.join(directory, "pyproject.toml")
-    base_dir = os.path.dirname(pyproject_path)
-    dependencies = extract_path_dependencies(pyproject_path)
+    pyproject_path = os.path.join(location, "pyproject.toml")
+    if not os.path.isfile(pyproject_path):
+        print(f"No pyproject.toml found in {location}", file=sys.stderr)
+        return
 
+    dependencies = extract_path_dependencies(pyproject_path)
     print("Building specified packages...")
+    base_dir = os.path.dirname(pyproject_path)
+
     for package_path in dependencies:
         full_path = os.path.join(base_dir, package_path)
         pyproject_file = os.path.join(full_path, "pyproject.toml")
         if os.path.isdir(full_path) and os.path.isfile(pyproject_file):
             print(f"Building package: {full_path}")
-            run_command("poetry build", cwd=full_path)
+            run_command(["poetry", "build"], cwd=full_path)
         else:
             print(f"Skipping {full_path}: not a valid package directory")
 
-
-def show_pip_freeze():
-    """
-    Show the installed packages using pip freeze.
-    """
-    print("Installed packages (pip freeze):")
-    run_command("pip freeze")
-
-
-def publish_package(directory=None, file=None, username=None, password=None):
-    """
-    Build and publish packages to PyPI.
-    
-    :param directory: Directory containing one or more packages.
-    :param file: Specific pyproject.toml file to use.
-    :param username: PyPI username.
-    :param password: PyPI password.
-    """
-    if directory:
-        print(f"Publishing all packages in {directory} and its subdirectories...")
-        for root, dirs, files in os.walk(directory):
-            if "pyproject.toml" in files:
-                print(f"Publishing package from {root}...")
-                run_command("poetry build", cwd=root)
-                run_command(
-                    f"poetry publish --username {username} --password {password}",
-                    cwd=root,
-                )
-    elif file:
-        location = os.path.dirname(file)
-        print(f"Publishing package from {location}...")
-        run_command("poetry build", cwd=location)
-        run_command(
-            f"poetry publish --username {username} --password {password}",
-            cwd=location,
-        )
-    else:
-        print("Error: Either a directory or a file must be specified.", file=sys.stderr)
-        sys.exit(1)
-
-
-def publish_from_dependencies(directory=None, file=None, username=None, password=None):
-    """
-    Build and publish packages based on path dependencies defined in a pyproject.toml.
-    
-    :param directory: Directory containing the base pyproject.toml.
-    :param file: Specific pyproject.toml file.
-    :param username: PyPI username.
-    :param password: PyPI password.
-    """
-    pyproject_path = file if file else os.path.join(directory, "pyproject.toml")
-    if not os.path.isfile(pyproject_path):
-        print(f"pyproject.toml not found at {pyproject_path}", file=sys.stderr)
-        sys.exit(1)
-
-    base_dir = os.path.dirname(pyproject_path)
-    dependencies = extract_path_dependencies(pyproject_path)
-    print("Building and publishing packages based on path dependencies...")
-    for package_path in dependencies:
-        full_path = os.path.join(base_dir, package_path)
-        pyproject_file = os.path.join(full_path, "pyproject.toml")
-        if os.path.isdir(full_path) and os.path.isfile(pyproject_file):
-            print(f"Building and publishing package: {full_path}")
-            run_command("poetry build", cwd=full_path)
-            run_command(
-                f"poetry publish --username {username} --password {password}",
-                cwd=full_path,
-            )
-        else:
-            print(f"Skipping {full_path}: not a valid package directory")
 
 def run_pytests(test_directory=".", num_workers=1):
     """
     Run pytest in the specified directory.
-    
-    If num_workers is greater than 1, uses pytest‑xdist to run tests in parallel.
-    
-    :param test_directory: Directory in which to run tests (default: current directory).
-    :param num_workers: Number of workers to use (default: 1). Requires pytest-xdist when > 1.
     """
-    command = "pytest"
-    try:
-        workers = int(num_workers)
-    except ValueError:
-        print("Error: num_workers must be an integer", file=sys.stderr)
-        sys.exit(1)
-    if workers > 1:
-        command += f" -n {workers}"
-    print(f"Running tests in '{test_directory}' with command: {command}")
+    command = ["poertry", "run", "pytest"]
+    if num_workers > 1:
+        command.extend(["-n", str(num_workers)])
+    print(f"Running tests in '{test_directory}' with command: {' '.join(command)}")
     run_command(command, cwd=test_directory)
+
+
+def find_pyproject_files(
+    file: str = None,
+    directory: str = None,
+    recursive: bool = False,
+    default_filename: str = "pyproject.toml"
+) -> List[str]:
+    """
+    Resolve which pyproject.toml file(s) to operate on.
+
+    1. If 'file' is provided, return just that file.
+    2. Else if 'directory' is provided:
+       - If 'recursive' is True, walk subdirs for default_filename.
+       - Otherwise, just look for default_filename in that one directory.
+    3. Otherwise, raise an error.
+    """
+    if file:
+        path = os.path.abspath(file)
+        if not os.path.isfile(path):
+            raise FileNotFoundError(f"File not found: {path}")
+        return [path]
+
+    if directory:
+        dir_path = os.path.abspath(directory)
+        if not os.path.isdir(dir_path):
+            raise NotADirectoryError(f"Directory not found: {dir_path}")
+
+        if recursive:
+            matched = []
+            for root, dirs, files in os.walk(dir_path):
+                if default_filename in files:
+                    matched.append(os.path.join(root, default_filename))
+            if not matched:
+                raise FileNotFoundError(
+                    f"No {default_filename} found recursively in {dir_path}"
+                )
+            return matched
+        else:
+            single = os.path.join(dir_path, default_filename)
+            if not os.path.isfile(single):
+                raise FileNotFoundError(f"No {default_filename} in {dir_path}")
+            return [single]
+
+    raise ValueError("Must provide either `file` or `directory`.")
+
+
+def poetry_publish(
+    file: str = None,
+    directory: str = None,
+    recursive: bool = False,
+    username: str = None,
+    password: str = None
+):
+    """
+    Builds and publishes packages to PyPI (or another configured repository).
+
+    You can specify one of:
+      - file=<path to pyproject.toml>
+      - directory=<path to directory containing pyproject.toml>
+      - directory=<path> + recursive=True to walk subdirectories
+
+    :param file: Explicit path to a pyproject.toml file.
+    :param directory: Path to a directory that has (or contains) a pyproject.toml.
+    :param recursive: If True, search subdirectories for pyproject.toml files.
+    :param username: PyPI username (optional). If not provided, rely on Poetry config or interactive prompt.
+    :param password: PyPI password (optional).
+    """
+    try:
+        pyproject_files = find_pyproject_files(file, directory, recursive)
+    except Exception as e:
+        print(f"Error discovering pyproject files: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    for pyproj in pyproject_files:
+        project_dir = os.path.dirname(pyproj)
+        print(f"Publishing package from {project_dir} ...")
+
+        # 1. Build the package
+        try:
+            run_command(["poetry", "build"], cwd=project_dir)
+        except Exception as e:
+            print(f"Failed to build package in {project_dir}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # 2. Publish the package
+        publish_cmd = ["poetry", "publish"]
+        # If you want verbose output, you can add ["-vv"] or similar
+        if username and password:
+            publish_cmd.extend(["--username", username, "--password", password])
+        # If you have a custom repository name, you can also add --repository <repo>
+
+        try:
+            run_command(publish_cmd, cwd=project_dir)
+        except Exception as e:
+            print(f"Failed to publish package in {project_dir}: {e}", file=sys.stderr)
+            sys.exit(1)

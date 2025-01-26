@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "soliloquy"
-version = "0.1.1.dev2"
+version = "0.1.1.dev3"
 description = "A CLI for managing a monorepo."
 authors = ["Jacob Stewart <jacob@swarmauri.com>"]
 license = "Apache2"
@@ -9,7 +9,6 @@ license = "Apache2"
 python = ">=3.10,<4.0"
 requests = "*"
 tomlkit = "*"
-toml = "*"
 packaging = "*"
 
 [tool.poetry.group.dev.dependencies]

@@ -2,46 +2,28 @@
 """
 pyproject_ops.py
 
-Provides functions for operating on pyproject.toml files:
-  - extract_path_dependencies: Retrieves dependencies that are defined with a "path".
-  - extract_git_dependencies: Retrieves dependencies that are defined with a "git" key.
-  - update_dependency_versions: For local dependencies (with a "path"), update their version in the parent 
-    pyproject.toml and optionally in the dependency’s own pyproject.toml.
-
-These functions can be used independently or integrated into a larger monorepo management tool.
+- Now uses tomlkit instead of toml
 """
 
 import os
 import sys
-import toml
-
+import tomlkit
 
 def extract_path_dependencies(pyproject_path):
-    """
-    Extract local (path) dependencies from a pyproject.toml file.
-
-    Looks for dependencies in [tool.poetry.dependencies] that are dictionaries containing a "path" key.
-
-    Args:
-        pyproject_path (str): Path to the pyproject.toml file.
-
-    Returns:
-        list: A list of path strings extracted from the dependency definitions.
-    """
     try:
-        with open(pyproject_path, "r") as f:
-            data = toml.load(f)
+        with open(pyproject_path, "r", encoding="utf-8") as f:
+            doc = tomlkit.parse(f.read())
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
 
-    dependencies = data.get("tool", {}).get("poetry", {}).get("dependencies", {})
-    path_deps = [
-        value["path"]
-        for value in dependencies.values()
-        if isinstance(value, dict) and "path" in value
-    ]
+    dependencies = doc.get("tool", {}).get("poetry", {}).get("dependencies", {})
+    path_deps = []
+    for val in dependencies.values():
+        if isinstance(val, dict) and "path" in val:
+            path_deps.append(val["path"])
     return path_deps
+
 
 
 def extract_git_dependencies(pyproject_path):
@@ -58,7 +40,7 @@ def extract_git_dependencies(pyproject_path):
     """
     try:
         with open(pyproject_path, "r") as f:
-            data = toml.load(f)
+            data = tomlki.load(f)
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -90,7 +72,7 @@ def update_dependency_versions(pyproject_path, new_version):
     """
     try:
         with open(pyproject_path, "r") as f:
-            data = toml.load(f)
+            data = tomlki.load(f)
     except Exception as e:
         print(f"Error reading {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
@@ -116,11 +98,11 @@ def update_dependency_versions(pyproject_path, new_version):
             if os.path.isfile(dependency_pyproject):
                 try:
                     with open(dependency_pyproject, "r") as dep_file:
-                        dep_data = toml.load(dep_file)
+                        dep_data = tomlki.load(dep_file)
                     if "tool" in dep_data and "poetry" in dep_data["tool"]:
                         dep_data["tool"]["poetry"]["version"] = new_version
                         with open(dependency_pyproject, "w") as dep_file:
-                            toml.dump(dep_data, dep_file)
+                            tomlki.dump(dep_data, dep_file)
                         print(f"Updated {dependency_pyproject} to version {new_version}")
                     else:
                         print(f"Invalid structure in {dependency_pyproject}", file=sys.stderr)
@@ -138,51 +120,3 @@ def update_dependency_versions(pyproject_path, new_version):
     except Exception as e:
         print(f"Error writing updated file {pyproject_path}: {e}", file=sys.stderr)
         sys.exit(1)
-
-
-def main():
-    """
-    Provides a basic CLI for testing pyproject.toml operations.
-    
-    Usage Examples:
-      - Extract dependencies:
-            python pyproject_ops.py --pyproject path/to/pyproject.toml
-      - Update dependency versions (for local path dependencies):
-            python pyproject_ops.py --pyproject path/to/pyproject.toml --update-version 2.0.0
-    """
-    import argparse
-
-    parser = argparse.ArgumentParser(description="Operate on pyproject.toml dependencies")
-    parser.add_argument(
-        "--pyproject",
-        required=True,
-        help="Path to the pyproject.toml file",
-    )
-    parser.add_argument(
-        "--update-version",
-        help="If provided, update local dependencies to this version",
-    )
-    args = parser.parse_args()
-
-    print("Extracting local (path) dependencies:")
-    paths = extract_path_dependencies(args.pyproject)
-    if paths:
-        print(", ".join(paths))
-    else:
-        print("No path dependencies found.")
-
-    print("\nExtracting Git dependencies:")
-    git_deps = extract_git_dependencies(args.pyproject)
-    if git_deps:
-        for name, details in git_deps.items():
-            print(f"{name}: {details}")
-    else:
-        print("No Git dependencies found.")
-
-    if args.update_version:
-        print(f"\nUpdating dependency versions to {args.update_version} ...")
-        update_dependency_versions(args.pyproject, args.update_version)
-
-
-if __name__ == "__main__":
-    main()

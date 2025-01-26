@@ -43,7 +43,6 @@ def read_pyproject_version(file_path):
         raise KeyError("No version found under [tool.poetry] in the given pyproject.toml")
     return version, doc
 
-
 def bump_version(current_version, bump_type):
     """
     Bumps the current version up using semantic versioning.
@@ -190,19 +189,3 @@ def bump_or_set_version(pyproject_file, bump=None, set_ver=None):
 
     update_pyproject_version(pyproject_file, new_version)
 
-
-# Example usage when running this module directly.
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Bump or set version in pyproject.toml using semantic versioning."
-    )
-    parser.add_argument("file", help="Path to the pyproject.toml file")
-
-    group = parser.add_mutually_exclusive_group(required=True)
-    group.add_argument("--bump", choices=["major", "minor", "patch", "finalize"], help="Type of version bump to perform")
-    group.add_argument("--set", dest="set_ver", help="Set the version explicitly (e.g. 1.2.3 or 1.2.3.dev1)")
-    
-    args = parser.parse_args()
-    bump_or_set_version(args.file, bump=args.bump, set_ver=args.set_ver)

@@ -169,19 +169,3 @@ def update_and_write_pyproject(input_file_path, output_file_path=None):
     except Exception as e:
         print(f"Error writing updated pyproject.toml: {e}")
         return False
-
-
-# Example usage when running this module directly.
-if __name__ == "__main__":
-    import argparse
-
-    parser = argparse.ArgumentParser(
-        description="Update local pyproject.toml with versions fetched from Git dependencies."
-    )
-    parser.add_argument("--input", required=True, help="Path to the local pyproject.toml to update")
-    parser.add_argument("--output", help="Optional output file path (if not specified, overwrites input)")
-    args = parser.parse_args()
-
-    success = update_and_write_pyproject(args.input, args.output)
-    if not success:
-        exit(1)

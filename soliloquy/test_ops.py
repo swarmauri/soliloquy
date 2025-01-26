@@ -195,14 +195,3 @@ def analyze_test_file(file_path, required_passed=None, required_skipped=None):
         print("\nTest analysis completed successfully.")
 
 
-def main():
-    args = parse_arguments(sys.argv[1:])
-    analyze_test_file(
-        file_path=args.file,
-        required_passed=args.required_passed,
-        required_skipped=args.required_skipped,
-    )
-
-
-if __name__ == "__main__":
-    main()

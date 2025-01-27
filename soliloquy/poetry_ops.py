@@ -135,7 +135,6 @@ def build_monorepo(
     import glob
 
     from .pyproject_ops import extract_path_dependencies, extract_git_dependencies
-    from .poetry_ops import run_command
     import tomlkit
 
     aggregator_path = os.path.abspath(file)

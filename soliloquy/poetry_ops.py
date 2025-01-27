@@ -7,11 +7,14 @@ Key changes:
   - run_command now uses shell=False and an array of arguments
   - If reading/writing pyproject, switch to tomlkit (if needed)
 """
-from typing import List
+from typing import List, Optional, Dict, Any, Tuple
 import os
 import subprocess
 import sys
+import tempfile
+import shutil
 import tomlkit
+from tomlkit import parse
 from .pyproject_ops import extract_path_dependencies, extract_git_dependencies, find_pyproject_files
 
 def run_command(command_args, cwd=None):
@@ -25,8 +28,7 @@ def run_command(command_args, cwd=None):
             cwd=cwd,
             text=True,
             capture_output=True,
-            shell=False,
-            check=True,
+            shell=False
         )
         if result.stdout:
             print(result.stdout, end="")
@@ -34,7 +36,6 @@ def run_command(command_args, cwd=None):
     except subprocess.CalledProcessError as e:
         print(f"Error running command: {e.stderr}", file=sys.stderr)
         sys.exit(e.returncode)
-
 
 def poetry_lock(location):
     """
@@ -52,8 +53,9 @@ def poetry_install(location, extras=None, with_dev=False, all_extras=False):
     command = ["poetry", "install", "--no-cache", "-vv"]
     if all_extras:
         command.append("--all-extras")
-    elif extras:
-        command.extend(["--extras", extras])
+    if extras:
+        for e in extras.split(","):
+            command.extend(["--extras", e.strip()])
     if with_dev:
         command.extend(["--with", "dev"])
     run_command(command, cwd=location)
@@ -79,35 +81,11 @@ def extract_path_dependencies(pyproject_path):
     ]
     return path_deps
 
-
-def recursive_build(location):
-    """
-    Recursively build packages based on path dependencies extracted from a pyproject.toml.
-    """
-    pyproject_path = os.path.join(location, "pyproject.toml")
-    if not os.path.isfile(pyproject_path):
-        print(f"No pyproject.toml found in {location}", file=sys.stderr)
-        return
-
-    dependencies = extract_path_dependencies(pyproject_path)
-    print("Building specified packages...")
-    base_dir = os.path.dirname(pyproject_path)
-
-    for package_path in dependencies:
-        full_path = os.path.join(base_dir, package_path)
-        pyproject_file = os.path.join(full_path, "pyproject.toml")
-        if os.path.isdir(full_path) and os.path.isfile(pyproject_file):
-            print(f"Building package: {full_path}")
-            run_command(["poetry", "build"], cwd=full_path)
-        else:
-            print(f"Skipping {full_path}: not a valid package directory")
-
-
 def run_pytests(test_directory=".", num_workers=1):
     """
     Run pytest in the specified directory.
     """
-    command = ["poertry", "run", "pytest"]
+    command = ["poetry", "run", "pytest"]
     if num_workers > 1:
         command.extend(["-n", str(num_workers)])
     print(f"Running tests in '{test_directory}' with command: {' '.join(command)}")
@@ -118,95 +96,169 @@ def poetry_ruff_lint(directory=".", fix=False):
     """
     Runs Ruff lint checks in the specified directory.
     If fix=True, also pass --fix to autofix issues.
-    
+
     :param directory: The directory to lint (defaults to '.')
     :param fix: Whether to run with --fix (autofixing) enabled.
+    :param cwd: The current working directory to run the command in (defaults to None)
     """
     # Construct the base command: 'poetry run ruff check <dir>'
     command = ["poetry", "run", "ruff", "check", directory]
     if fix:
         command.append("--fix")
 
-    print(f"Running Ruff on '{directory}' (fix={fix})...")
-    run_command(command)
+    print(f"Running Ruff on '{directory}' (fix={fix}) with cwd='{directory}'...")
+    run_command(command, cwd=directory)
 
 
-def build_monorepo(file: str):
+def build_monorepo(
+    file: str,
+    build_dir: str = None,   # <-- new parameter
+    cleanup: bool = True
+):
     """
-    Build a monorepo aggregator pyproject.toml that has 'package-mode=false'
-    in [tool.poetry], plus any local path dependencies and Git dependencies.
-    
-    :param file: Path to the monorepo aggregator pyproject.toml.
+    Build a 'monorepo aggregator' pyproject.toml that has 'package-mode=false'
+    by:
+      1) Building all local path dependencies
+      2) Cloning and building Git-based dependencies
+
+    :param file: Path to the aggregator pyproject.toml
+    :param build_dir: If provided, use this directory instead of a temp folder
+                     for cloning Git dependencies.
+    :param cleanup: If True, and if we created a temporary directory, remove it
+                    after building. If build_dir is explicitly provided, we
+                    never remove it automatically.
     """
+    import os
+    import tempfile
+    import shutil
+    from typing import Dict, Tuple, List
+
+    from .pyproject_ops import extract_path_dependencies, extract_git_dependencies
+    from .poetry_ops import run_command
     import tomlkit
 
-    if not file or not os.path.isfile(file):
-        raise FileNotFoundError(f"Monorepo file not found: {file}")
+    aggregator_path = os.path.abspath(file)
+    if not os.path.isfile(aggregator_path):
+        raise FileNotFoundError(f"Monorepo aggregator file not found: {aggregator_path}")
 
-    print(f"Building monorepo aggregator from {file}")
+    print(f"Building monorepo aggregator from: {aggregator_path}")
 
-    with open(file, "r", encoding="utf-8") as f:
+    # Parse aggregator's pyproject
+    with open(aggregator_path, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
     tool_poetry = doc.get("tool", {}).get("poetry", {})
-    pkg_mode = tool_poetry.get("package-mode", True)  # default to True
-    if pkg_mode is not False:
-        print("Warning: This file doesn't specify package-mode=false. Continuing anyway...")
+    package_mode = tool_poetry.get("package-mode", True)
+    if package_mode is not False:
+        print("Warning: 'package-mode=false' not found or set. Proceeding as aggregator, but be aware.")
 
-    # Base directory of the monorepo
-    base_dir = os.path.dirname(os.path.abspath(file))
-    print(f"Base directory set to: {base_dir}")
+    aggregator_dir = os.path.dirname(aggregator_path)
 
-    # Step 1: Build path dependencies
-    path_deps = extract_path_dependencies(file)
-    print(f"Found {len(path_deps)} path dependencies in aggregator {file}.")
+    # 1) Build Local Path Dependencies
+    path_deps = extract_path_dependencies(aggregator_path)
+    if path_deps:
+        print(f"\nFound {len(path_deps)} local path dependencies. Building each ...")
+        for path_rel in path_deps:
+            sub_path = os.path.join(aggregator_dir, path_rel)
+            pyproj_file = os.path.join(sub_path, "pyproject.toml")
 
-    for dep in path_deps:
-        normalized_dep = os.path.normpath(dep)
-        full_path = os.path.join(base_dir, normalized_dep)
-        sub_pyproj = os.path.join(full_path, "pyproject.toml")
-        print(f"Processing path dependency: {dep} -> {full_path}")
+            if not os.path.isdir(sub_path):
+                print(f"Skipping '{path_rel}': directory not found at {sub_path}.")
+                continue
+            if not os.path.isfile(pyproj_file):
+                print(f"Skipping '{sub_path}': no pyproject.toml found.")
+                continue
 
-        if os.path.isdir(full_path):
-            if os.path.isfile(sub_pyproj):
-                print(f"Building local path dependency: {full_path}")
-                try:
-                    run_command(["poetry", "build"], cwd=full_path)
-                except Exception as e:
-                    print(f"Failed to build path dependency {full_path}: {e}", file=sys.stderr)
-            else:
-                print(f"Skipping {full_path}: 'pyproject.toml' not found.")
-        else:
-            print(f"Skipping {full_path}: directory does not exist.")
-
-    # Step 2: Build Git dependencies
-    git_deps = extract_git_dependencies(file)
-    if git_deps:
-        print(f"Found {len(git_deps)} Git dependencies in aggregator {file}.")
-
-        # Extract subdirectories from Git dependencies
-        list_of_subdirs = [git_deps[pkg].get('subdirectory', '.') for pkg in git_deps]
-        for subdir in list_of_subdirs:
-            normalized_subdir = os.path.normpath(subdir)
-            full_subdir_path = os.path.join(base_dir, normalized_subdir)
-            sub_pyproj = os.path.join(full_subdir_path, "pyproject.toml")
-            print(f"Processing Git dependency subdirectory: {subdir} -> {full_subdir_path}")
-
-            if os.path.isdir(full_subdir_path):
-                if os.path.isfile(sub_pyproj):
-                    print(f"Building Git dependency package: {full_subdir_path}")
-                    try:
-                        run_command(["poetry", "build"], cwd=full_subdir_path)
-                    except Exception as e:
-                        print(f"Failed to build Git dependency {full_subdir_path}: {e}", file=sys.stderr)
-                else:
-                    print(f"Skipping {full_subdir_path}: 'pyproject.toml' not found.")
-            else:
-                print(f"Skipping {full_subdir_path}: directory does not exist.")
+            print(f"Building local path dependency in {sub_path} ...")
+            try:
+                run_command(["poetry", "build"], cwd=sub_path)
+            except Exception as e:
+                print(f"Failed to build local path dependency {sub_path}: {e}")
     else:
-        print("No Git dependencies found in aggregator.")
+        print("No local path dependencies found to build.")
 
-    print("Monorepo build completed.")
+    # 2) Build Git Dependencies
+    git_deps = extract_git_dependencies(aggregator_path)
+    if not git_deps:
+        print("No Git dependencies found. Done.")
+        return
+
+    print(f"\nFound {len(git_deps)} Git dependencies to build.")
+
+    # Group by (git_url, branch)
+    grouped_deps: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+    for dep_name, details in git_deps.items():
+        git_url = details.get("git")
+        branch = details.get("branch", "main")
+        subdir = details.get("subdirectory", ".")
+        key = (git_url, branch)
+
+        if key not in grouped_deps:
+            grouped_deps[key] = []
+        grouped_deps[key].append((dep_name, subdir))
+
+    # If user didn't provide a build_dir, create a temp folder
+    created_temp_dir = False
+    if build_dir:
+        build_root = os.path.abspath(build_dir)
+        os.makedirs(build_root, exist_ok=True)
+        print(f"Using user-specified build directory: {build_root}")
+    else:
+        build_root = tempfile.mkdtemp(prefix="mono_build_")
+        created_temp_dir = True
+        print(f"Using temporary directory for clones: {build_root}")
+
+    try:
+        for (git_url, branch), sub_pkgs in grouped_deps.items():
+            print(f"\n---\nCloning {git_url} (branch: {branch}) to build {len(sub_pkgs)} sub-packages.")
+
+            # Make the subfolder name
+            clone_dir_name = branch.replace("/", "-") + "_clone"
+            clone_dir = os.path.join(build_root, clone_dir_name)
+
+            clone_cmd = [
+                "git", "clone",
+                "--depth", "1",
+                "--branch", branch,
+                git_url,
+                clone_dir
+            ]
+
+            try:
+                run_command(clone_cmd)
+            except Exception as e:
+                print(f"Failed to clone {git_url}: {e}")
+                continue
+
+            # Build each subdirectory
+            for (dep_name, subdir) in sub_pkgs:
+                sub_path = os.path.join(clone_dir, subdir)
+                pyproj_file = os.path.join(sub_path, "pyproject.toml")
+
+                if not os.path.isdir(sub_path):
+                    print(f"[{dep_name}] Subdirectory '{subdir}' not found.")
+                    continue
+                if not os.path.isfile(pyproj_file):
+                    print(f"[{dep_name}] No pyproject.toml in {sub_path}. Skipping.")
+                    continue
+
+                print(f"[{dep_name}] Building package in {sub_path}")
+                try:
+                    run_command(["poetry", "build"], cwd=sub_path)
+                except Exception as e:
+                    print(f"[{dep_name}] Failed to build: {e}")
+
+        print("\nAll local path & Git sub-packages processed.")
+    finally:
+        if created_temp_dir and cleanup:
+            import shutil
+            shutil.rmtree(build_root, ignore_errors=True)
+            print(f"Cleaned up temporary directory: {build_root}")
+        else:
+            if not created_temp_dir:
+                print(f"User-specified build directory left intact: {build_root}")
+            else:
+                print(f"Temporary build directory not removed: {build_root} (cleanup=False).")
 
 def poetry_publish(
     file: str = None,
@@ -229,6 +281,10 @@ def poetry_publish(
     :param username: PyPI username (optional). If not provided, rely on Poetry config or interactive prompt.
     :param password: PyPI password (optional).
     """
+
+    username = username or os.environ.get("POETRY_PYPI_USERNAME")
+    password = password or os.environ.get("POETRY_PYPI_PASSWORD")
+
     try:
         pyproject_files = find_pyproject_files(file, directory, recursive)
     except Exception as e:

@@ -127,16 +127,21 @@ def handle_build_pkg(args):
 def handle_build_mono(args):
     """
     Handles 'cli build mono' logic.
-    Only supports -f (i.e., a single aggregator pyproject).
+    Only supports -f (a single aggregator pyproject).
+    Now also supports optional --build-dir and --no-cleanup.
     """
     from soliloquy import poetry_ops
     try:
-        # This calls a specialized function for monorepo aggregator building,
-        # or reuses the same function if you'd like but with some constraints.
-        poetry_ops.build_monorepo(file=args.file)
+        # Pass our new arguments:
+        poetry_ops.build_monorepo(
+            file=args.file,
+            build_dir=args.build_dir,
+            cleanup=not args.no_cleanup
+        )
     except Exception as e:
         print(f"Error in build mono command: {e}", file=sys.stderr)
         sys.exit(1)
+
 
 
 def handle_version(args):
@@ -170,7 +175,12 @@ def handle_remote(args):
 
     elif args.remote_cmd == "update":
         try:
-            success = remote_ops.update_and_write_pyproject(args.file, args.output)
+            success = remote_ops.remote_update_bulk(
+            file=args.file,
+            directory=args.dir,
+            recursive=args.recursive,
+            output=args.output
+        )
             if not success:
                 sys.exit(1)
         except Exception as e:
@@ -255,6 +265,26 @@ def handle_lint(args):
         print(f"Error in lint command: {e}", file=sys.stderr)
         sys.exit(1)
 
+def handle_version(args):
+    """
+    Updated version handler that allows -f/--file, -d/--dir, and -R/--recursive.
+    Also supports --bump or --set for the version operation.
+    """
+    from soliloquy.version_ops import version_bulk
+
+    try:
+        # We call version_bulk with the right arguments
+        version_bulk(
+            file=args.file,
+            directory=args.dir,
+            recursive=args.recursive,
+            bump=args.bump,
+            set_ver=args.set_ver
+        )
+    except Exception as e:
+        print(f"Error in version command: {e}", file=sys.stderr)
+        sys.exit(1)
+
 
 #------------------------------------------------------------------------------
 # Main Entry Point with Subparser & Command Mapping
@@ -300,17 +330,26 @@ def main():
     mono_parser = build_subparsers.add_parser("mono", help="Build monorepo aggregator only (requires -f).")
     mono_parser.add_argument("-f", "--file", type=str, required=True,
                              help="Path to a monorepo aggregator pyproject.toml (with package-mode=false)")
-    # The function that handles 'build mono'
+    mono_parser.add_argument("--build-dir", type=str,
+                             help="Directory to clone and build Git dependencies (default: temp dir).")
+    mono_parser.add_argument("--no-cleanup", action="store_true",
+                             help="If set, do NOT remove the build directory (only applies if we create a temp dir).")
     mono_parser.set_defaults(func=handle_build_mono)
+
     
     # version
-    version_parser = subparsers.add_parser("version", help="Bump or set package version")
-    # Instead of a positional argument, we now use -f/--file:
-    version_parser.add_argument("-f", "--file", required=True, help="Path to the pyproject.toml file")
+    version_parser = subparsers.add_parser("version", help="Bump or set package version(s)")
+    version_parser.add_argument("-f", "--file", help="Path to a specific pyproject.toml")
+    version_parser.add_argument("-d", "--dir", help="Directory containing one or more pyproject.toml")
+    version_parser.add_argument("-R", "--recursive", action="store_true", help="Recursively find pyproject.toml files")
+
     vgroup = version_parser.add_mutually_exclusive_group(required=True)
     vgroup.add_argument("--bump", choices=["major", "minor", "patch", "finalize"],
                         help="Bump the version (e.g. patch, major, minor, finalize)")
     vgroup.add_argument("--set", dest="set_ver", help="Explicit version to set (e.g. 2.0.0.dev1)")
+
+    version_parser.set_defaults(func=handle_version)
+
     
     # remote
     remote_parser = subparsers.add_parser("remote", help="Remote operations for Git dependencies")
@@ -322,9 +361,11 @@ def main():
     fetch_parser.add_argument("--subdir", type=str, default="", help="Subdirectory for pyproject.toml")
     
     update_parser = remote_subparsers.add_parser("update", help="Update local pyproject.toml with remote versions")
-    # Use short/long for file & output
-    update_parser.add_argument("-f", "--file", required=True, help="Path to the local pyproject.toml")
-    update_parser.add_argument("-o", "--output", help="Optional output file path (defaults to overwriting the input)")
+    update_parser.add_argument("-f", "--file", help="Path to the local pyproject.toml")
+    update_parser.add_argument("-d", "--dir", help="Directory containing pyproject.toml(s)")
+    update_parser.add_argument("-R", "--recursive", action="store_true", help="Recursively find pyproject.toml files")
+    update_parser.add_argument("-o", "--output", help="Optional output file path (applies only if a single file is found)")
+
 
     # test
     test_parser = subparsers.add_parser("test", help="Run tests using pytest")

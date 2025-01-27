@@ -189,3 +189,44 @@ def bump_or_set_version(pyproject_file, bump=None, set_ver=None):
 
     update_pyproject_version(pyproject_file, new_version)
 
+def version_bulk(
+    file: str = None,
+    directory: str = None,
+    recursive: bool = False,
+    bump: str = None,
+    set_ver: str = None
+):
+    """
+    Finds one or more pyproject.toml files (using -f / -d / -R logic),
+    then applies either a bump or set-version operation to each.
+
+    :param file: Explicit path to a pyproject.toml
+    :param directory: Path to a directory that has (or contains) pyproject.toml
+    :param recursive: If True, search subdirectories for pyproject.toml
+    :param bump: One of "major", "minor", "patch", "finalize"
+    :param set_ver: Explicit version string to set
+    """
+    try:
+        pyproject_files = find_pyproject_files(file, directory, recursive)
+    except (FileNotFoundError, NotADirectoryError, ValueError) as e:
+        print(f"Error discovering pyproject files: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if not bump and not set_ver:
+        print("No version operation specified (bump or set_ver).", file=sys.stderr)
+        sys.exit(1)
+
+    # For each discovered pyproject, apply bump or set
+    for pyproj_file in pyproject_files:
+        print(f"\n---\nProcessing {pyproj_file} ...")
+        try:
+            bump_or_set_version(pyproj_file, bump=bump, set_ver=set_ver)
+        except SystemExit as e:
+            # If bump_or_set_version sys.exit's on an error, handle or re-raise
+            print(f"Aborting due to error on {pyproj_file}.", file=sys.stderr)
+            sys.exit(e.code)
+        except Exception as e:
+            print(f"Error modifying version in {pyproj_file}: {e}", file=sys.stderr)
+            sys.exit(1)
+
+    print("\nAll specified pyproject.toml files have been processed.")

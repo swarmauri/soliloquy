@@ -128,12 +128,11 @@ def find_pyproject_files(
 ) -> List[str]:
     """
     Resolve which pyproject.toml file(s) to operate on.
-
-    1. If 'file' is provided, return just that file.
-    2. Else if 'directory' is provided:
-       - If 'recursive' is True, walk subdirs for default_filename.
-       - Otherwise, just look for default_filename in that one directory.
-    3. Otherwise, raise an error.
+      1. If `file` is provided, return just that file.
+      2. Else if `directory` is provided:
+          - If 'recursive' is True, walk subdirs for default_filename.
+          - Otherwise, just look for default_filename in that one directory.
+      3. Otherwise, raise an error.
     """
     if file:
         path = os.path.abspath(file)

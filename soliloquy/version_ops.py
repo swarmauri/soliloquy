@@ -14,7 +14,7 @@ Intended for use in a unified monorepo management CLI.
 import sys
 from packaging.version import Version, InvalidVersion
 from tomlkit import parse, dumps
-
+from .pyproject_ops import find_pyproject_files
 
 def read_pyproject_version(file_path):
     """

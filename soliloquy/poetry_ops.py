@@ -112,7 +112,7 @@ def poetry_ruff_lint(directory=".", fix=False):
 
 def build_monorepo(
     file: str,
-    build_dir: str = None,   # <-- new parameter
+    build_dir: str = None,
     cleanup: bool = True
 ):
     """
@@ -120,18 +120,19 @@ def build_monorepo(
     by:
       1) Building all local path dependencies
       2) Cloning and building Git-based dependencies
+      3) Moving the resulting dist artifacts into build_dir (if provided).
 
     :param file: Path to the aggregator pyproject.toml
-    :param build_dir: If provided, use this directory instead of a temp folder
-                     for cloning Git dependencies.
-    :param cleanup: If True, and if we created a temporary directory, remove it
-                    after building. If build_dir is explicitly provided, we
-                    never remove it automatically.
+    :param build_dir: If provided, we place cloned Git repos AND final build
+                      artifacts here. If None, we use a temp folder for cloning
+                      but still place final artifacts there.
+    :param cleanup: Whether to remove our build_dir if it’s a temp folder.
     """
     import os
     import tempfile
     import shutil
     from typing import Dict, Tuple, List
+    import glob
 
     from .pyproject_ops import extract_path_dependencies, extract_git_dependencies
     from .poetry_ops import run_command
@@ -143,7 +144,6 @@ def build_monorepo(
 
     print(f"Building monorepo aggregator from: {aggregator_path}")
 
-    # Parse aggregator's pyproject
     with open(aggregator_path, "r", encoding="utf-8") as f:
         doc = tomlkit.parse(f.read())
 
@@ -154,7 +154,51 @@ def build_monorepo(
 
     aggregator_dir = os.path.dirname(aggregator_path)
 
+    # ------------------------------------------------------
+    # Helper function to build a project & then move its dist
+    # artifacts into a subfolder under build_root.
+    # ------------------------------------------------------
+    def build_and_collect_artifacts(project_path: str, build_root: str):
+        # Run 'poetry build' inside project_path
+        run_command(["poetry", "build"], cwd=project_path)
+
+        # dist/ subfolder inside that project
+        dist_folder = os.path.join(project_path, "dist")
+        if not os.path.isdir(dist_folder):
+            return  # Might be an error or something, but let's just skip.
+
+        # For neatness, name the subfolder after the project itself:
+        project_name = os.path.basename(os.path.normpath(project_path))
+        # e.g. build_root/mypackage
+        target_folder = os.path.join(build_root, project_name)
+        os.makedirs(target_folder, exist_ok=True)
+
+        # Move any wheels/sdists to the target_folder
+        for artifact in glob.glob(os.path.join(dist_folder, "*")):
+            artifact_name = os.path.basename(artifact)
+            dest_file = os.path.join(target_folder, artifact_name)
+            print(f"Moving {artifact} -> {dest_file}")
+            shutil.move(artifact, dest_file)
+
+        # Optionally remove the now-empty dist folder:
+        shutil.rmtree(dist_folder, ignore_errors=True)
+
+    # ------------------------------------------------------
+    # Decide how to create or re-use build_root
+    # ------------------------------------------------------
+    created_temp_dir = False
+    if build_dir:
+        build_root = os.path.abspath(build_dir)
+        os.makedirs(build_root, exist_ok=True)
+        print(f"Using user-specified build directory: {build_root}")
+    else:
+        build_root = tempfile.mkdtemp(prefix="mono_build_")
+        created_temp_dir = True
+        print(f"Using temporary directory for clones: {build_root}")
+
+    # ------------------------------------------------------
     # 1) Build Local Path Dependencies
+    # ------------------------------------------------------
     path_deps = extract_path_dependencies(aggregator_path)
     if path_deps:
         print(f"\nFound {len(path_deps)} local path dependencies. Building each ...")
@@ -171,22 +215,32 @@ def build_monorepo(
 
             print(f"Building local path dependency in {sub_path} ...")
             try:
-                run_command(["poetry", "build"], cwd=sub_path)
+                build_and_collect_artifacts(sub_path, build_root)
             except Exception as e:
                 print(f"Failed to build local path dependency {sub_path}: {e}")
     else:
         print("No local path dependencies found to build.")
 
+    # ------------------------------------------------------
     # 2) Build Git Dependencies
+    # ------------------------------------------------------
     git_deps = extract_git_dependencies(aggregator_path)
     if not git_deps:
         print("No Git dependencies found. Done.")
+        # Possibly remove the build_root if it's temp and cleanup is True
+        if created_temp_dir and cleanup:
+            shutil.rmtree(build_root, ignore_errors=True)
+            print(f"Cleaned up temporary directory: {build_root}")
+        else:
+            if not created_temp_dir:
+                print(f"User-specified build directory left intact: {build_root}")
+            else:
+                print(f"Temporary build directory not removed: {build_root} (cleanup=False).")
         return
 
     print(f"\nFound {len(git_deps)} Git dependencies to build.")
-
-    # Group by (git_url, branch)
     grouped_deps: Dict[Tuple[str, str], List[Tuple[str, str]]] = {}
+
     for dep_name, details in git_deps.items():
         git_url = details.get("git")
         branch = details.get("branch", "main")
@@ -197,22 +251,11 @@ def build_monorepo(
             grouped_deps[key] = []
         grouped_deps[key].append((dep_name, subdir))
 
-    # If user didn't provide a build_dir, create a temp folder
-    created_temp_dir = False
-    if build_dir:
-        build_root = os.path.abspath(build_dir)
-        os.makedirs(build_root, exist_ok=True)
-        print(f"Using user-specified build directory: {build_root}")
-    else:
-        build_root = tempfile.mkdtemp(prefix="mono_build_")
-        created_temp_dir = True
-        print(f"Using temporary directory for clones: {build_root}")
-
+    # Clone & build each grouping:
     try:
         for (git_url, branch), sub_pkgs in grouped_deps.items():
             print(f"\n---\nCloning {git_url} (branch: {branch}) to build {len(sub_pkgs)} sub-packages.")
 
-            # Make the subfolder name
             clone_dir_name = branch.replace("/", "-") + "_clone"
             clone_dir = os.path.join(build_root, clone_dir_name)
 
@@ -230,7 +273,7 @@ def build_monorepo(
                 print(f"Failed to clone {git_url}: {e}")
                 continue
 
-            # Build each subdirectory
+            # Build each subdirectory in the newly cloned repo
             for (dep_name, subdir) in sub_pkgs:
                 sub_path = os.path.join(clone_dir, subdir)
                 pyproj_file = os.path.join(sub_path, "pyproject.toml")
@@ -244,14 +287,13 @@ def build_monorepo(
 
                 print(f"[{dep_name}] Building package in {sub_path}")
                 try:
-                    run_command(["poetry", "build"], cwd=sub_path)
+                    build_and_collect_artifacts(sub_path, build_root)
                 except Exception as e:
                     print(f"[{dep_name}] Failed to build: {e}")
 
         print("\nAll local path & Git sub-packages processed.")
     finally:
         if created_temp_dir and cleanup:
-            import shutil
             shutil.rmtree(build_root, ignore_errors=True)
             print(f"Cleaned up temporary directory: {build_root}")
         else:
@@ -259,6 +301,7 @@ def build_monorepo(
                 print(f"User-specified build directory left intact: {build_root}")
             else:
                 print(f"Temporary build directory not removed: {build_root} (cleanup=False).")
+
 
 def poetry_publish(
     file: str = None,

@@ -6,15 +6,14 @@ from typing import Any
 from soliloquy.phases.validate import run_validate
 from soliloquy.ops.remote_ops import remote_update_bulk
 from soliloquy.ops.publish_ops import publish_packages
-from soliloquy.ops.lock_ops import lock_packages
+
 
 def run_release(args: Any) -> None:
     """
     The 'release' phase:
-      1. Validate (build, install, test, analyze) - includes an initial lock
+      1. Validate (build, install, test, analyze)
       2. Remote update any Git-based dependencies
-      3. Lock again (since remote update changed dependencies)
-      4. Publish
+      3. Publish
 
     If any step fails, we exit.
     """

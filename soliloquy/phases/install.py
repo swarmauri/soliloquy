@@ -1,10 +1,10 @@
-# myworkflow/phases/install.py
+# soliloquy/phases/install.py
 
 import sys
 from typing import Any
 
-from myworkflow.ops.lock_ops import lock_packages
-from myworkflow.ops.install_ops import install_packages
+from soliloquy.ops.lock_ops import lock_packages
+from soliloquy.ops.install_ops import install_packages
 
 def run_install(args: Any) -> None:
     """

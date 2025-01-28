@@ -12,7 +12,6 @@ def run_validate(args: Any) -> None:
     """
     The 'validate' phase now includes:
       1. Build
-      2. Install
       3. Test
       4. Analyze
     """

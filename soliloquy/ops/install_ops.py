@@ -45,7 +45,7 @@ def install_packages(
         if is_aggregator:
             print(f"  Detected aggregator '{pkg_name}' (package-mode=false). Skipping aggregator install.")
             # Instead, install each local path dependency
-            success = _install_local_path_deps(pyproj_path)
+            success = _run_poetry_install(pyproj_path, extras=True)
             if not success:
                 overall_success = False
         else:
@@ -83,43 +83,14 @@ def _check_if_aggregator(pyproj_path: str) -> (bool, str):
     is_aggregator = (pkg_mode is False)
     return is_aggregator, pkg_name
 
-
-def _install_local_path_deps(aggregator_pyproj: str) -> bool:
-    """
-    For the aggregator pyproject, gather local path dependencies
-    and install each. Returns True if all succeed.
-    """
-    deps = extract_path_dependencies(aggregator_pyproj)
-    if not deps:
-        print("  No local path dependencies found in aggregator.")
-        return True
-
-    base_dir = os.path.dirname(aggregator_pyproj)
-    overall_success = True
-
-    print(f"  Found {len(deps)} local path dependencies. Installing each ...")
-    for sub_path in deps:
-        full_subpkg_path = os.path.join(base_dir, sub_path)
-        sub_pyproj = os.path.join(full_subpkg_path, "pyproject.toml")
-
-        if not os.path.isdir(full_subpkg_path) or not os.path.isfile(sub_pyproj):
-            print(f"    Skipping {sub_path}: not a valid local package directory.", file=sys.stderr)
-            overall_success = False
-            continue
-
-        print(f"    Installing local path dependency at {full_subpkg_path} ...")
-        success = _run_poetry_install(full_subpkg_path)
-        if not success:
-            overall_success = False
-    return overall_success
-
-
-def _run_poetry_install(package_dir: str) -> bool:
+def _run_poetry_install(package_dir: str, extras: bool) -> bool:
     """
     Helper that runs 'poetry install' in the given directory.
     Returns True if successful, False otherwise.
     """
     cmd = ["poetry", "install", "--no-cache", "-vv"]
+    if extras:
+        cmd.append("--all-extras")
     print(f"      Running: {' '.join(cmd)} (cwd={package_dir})")
 
     rc = run_command(cmd, cwd=package_dir)

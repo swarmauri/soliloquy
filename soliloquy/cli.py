@@ -63,8 +63,6 @@ def main():
     release_parser.add_argument("--results-json", help="JSON test-results file for analysis.")
     release_parser.add_argument("--required-passed", help="e.g. 'ge:80'.")
     release_parser.add_argument("--required-skipped", help="e.g. 'lt:10'.")
-
-    release_parser.add_argument("--publish-username", help="PyPI username.")
     release_parser.add_argument("--publish-password", help="PyPI password.")
     release_parser.add_argument("--no-cleanup", action="store_true",
                                 help="If set, do NOT remove the temporary test directory for Git-based deps.")

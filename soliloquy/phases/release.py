@@ -25,11 +25,14 @@ def run_release(args: Any) -> None:
     print("[release] Running validation (test only).")
     test_results = run_validate(args)
     test_mode = getattr(args, "test_mode", "single")
-    git_temp_dir = test_results.get("git_temp_dir")  # Retrieve the temporary directory if any
+
+    git_temp_dir = test_results.get("git_temp_dir")
+    details = test_results.get("details", [])
+    overall_success = test_results.get("success", False)
 
     if test_mode != "each":
         # monorepo or single => if success, build + remote update + publish all; else fail
-        if not test_results["success"]:
+        if not overall_success:
             print("[release] Some tests failed in monorepo/single mode. Exiting.", file=sys.stderr)
             sys.exit(1)
 
@@ -44,25 +47,14 @@ def run_release(args: Any) -> None:
             sys.exit(1)
 
         print("[release] Remote update ...")
-        if git_temp_dir:
-            # If there is a temporary directory (cloned Git dependencies), update them
-            print(f"[release] Remote update on Git dependencies in temporary directory: {git_temp_dir}")
-            if not remote_update_bulk(
-                file=None,  # Since we are using directory
-                directory=git_temp_dir,
-                recursive=True
-            ):
-                print("[release] Remote update failed for Git dependencies. Exiting.", file=sys.stderr)
-                sys.exit(1)
-        else:
-            # No Git dependencies; update the main directory
-            if not remote_update_bulk(
-                file=args.file,
-                directory=args.directory,
-                recursive=args.recursive
-            ):
-                print("[release] Remote update failed. Exiting.", file=sys.stderr)
-                sys.exit(1)
+        remote_ok = remote_update_bulk(
+            file=args.file,
+            directory=args.directory,
+            recursive=args.recursive
+        )
+        if not remote_ok:
+            print("[release] Remote update failed. Exiting.", file=sys.stderr)
+            sys.exit(1)
 
         print("[release] Publishing packages ...")
         repository = getattr(args, "repository", None)
@@ -85,7 +77,7 @@ def run_release(args: Any) -> None:
     # If test_mode == "each", partial pass scenario:
     # we check aggregator or multiple pyprojects, build/publish only those that pass
     # ------------------------------------------------------------------
-    if not test_results["details"]:
+    if not details:
         print("[release] No subpackages tested? Exiting.", file=sys.stderr)
         sys.exit(1)
 
@@ -100,38 +92,38 @@ def run_release(args: Any) -> None:
 
     # Collect a list of subpackage directories that passed
     passed_dirs = [
-        d["directory"] for d in test_results["details"] if d["success"]
+        d["directory"] for d in details if d["success"]
     ]
     if not passed_dirs:
         print("[release] All subpackages failed. Nothing to publish.", file=sys.stderr)
         sys.exit(1)
 
-    # Remote update should target the temporary directory if Git dependencies exist
+    # Remote update based on the presence of git_temp_dir
     if git_temp_dir:
-        print(f"[release] Remote update on Git dependencies in temporary directory: {git_temp_dir}")
+        print(f"[release] Git-based dependencies cloned to temporary directory: {git_temp_dir}")
+        print("[release] Performing remote update on cloned Git dependencies ...")
         ru_ok = remote_update_bulk(
-            file=None,  # Since we are using directory
+            file=None,
             directory=git_temp_dir,
             recursive=True
         )
         if not ru_ok:
-            print("[release] Remote update failed for Git dependencies. Exiting.", file=sys.stderr)
+            print("[release] Remote update failed for cloned Git dependencies. Exiting.", file=sys.stderr)
             sys.exit(1)
     else:
-        # No Git dependencies; proceed as before
         if is_agg:
             print(f"[release] Aggregator '{agg_name}' detected. Doing aggregator-level remote update once ...")
             ru_ok = remote_update_bulk(
                 file=aggregator_pyproj,
-                directory=None,  # Since we are specifying the file directly
+                directory=None,  # Use aggregator's directory
                 recursive=False
             )
             if not ru_ok:
                 print("[release] Remote update failed. Exiting.", file=sys.stderr)
                 sys.exit(1)
         else:
-            # If not aggregator, perform remote update on all pyprojects
-            print("[release] Non-aggregator. Doing a single remote update for all found pyprojects ...")
+            # If not aggregator, perform a remote update on all discovered pyprojects
+            print("[release] Non-aggregator. Performing remote update on all discovered pyprojects ...")
             ru_ok = remote_update_bulk(
                 file=None,
                 directory=args.directory,

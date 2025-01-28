@@ -151,6 +151,10 @@ def run_tests_with_mode(
                 git_ok, git_tmp_dir = _test_git_deps(git_deps, details, num_workers, cleanup)
                 if not git_ok:
                     all_passed = False
+                    
+                if git_tmp_dir is not None:
+                    git_temp_dir = git_tmp_dir
+
 
         else:
             # Non-aggregator => we test each discovered pyproject in subdirs individually

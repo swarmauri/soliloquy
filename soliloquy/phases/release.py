@@ -12,31 +12,39 @@ from soliloquy.ops.publish_ops import publish_packages
 from soliloquy.ops.test_ops import _check_if_aggregator  # or re-implement aggregator check
 from soliloquy.ops.build_ops import build_packages
 
-
 def run_release(args: Any) -> None:
     """
     The 'release' phase:
-      - Validate (test-only, but in "each" mode we get subpackage results)
-      - For aggregator + each-mode, build/update/publish only subpackages that passed
-      - For monorepo or single-mode, either all pass => build/publish, or fail => exit
-      - Remote update (optionally aggregator or subpackages)
+      - Validate (test-only, in user-specified mode)
+      - If mode != 'each':
+          * If tests pass, build + publish, but DO NOT update aggregator or any local pyprojects.
+      - If mode == 'each':
+          * Only update the cloned/temporary subpackages inside the git_temp_dir.
+          * Build/publish only subpackages that passed.
     """
 
     print("[release] Running validation (test only).")
     test_results = run_validate(args)
     test_mode = getattr(args, "test_mode", "single")
 
-    git_temp_dir = test_results.get("git_temp_dir")
-    details = test_results.get("details", [])
+    # Overall test success or failure
     overall_success = test_results.get("success", False)
+    # Each-mode test detail array
+    details = test_results.get("details", [])
+    # The temp directory containing cloned Git deps (only relevant if aggregator + each-mode + Git deps)
+    git_temp_dir = test_results.get("git_temp_dir")
 
+    # ------------------------------------------------------------------
+    # For single or monorepo mode, if tests fail => stop; if pass => build & publish
+    # BUT do NOT do any remote update on aggregator or local pyprojects.
+    # ------------------------------------------------------------------
     if test_mode != "each":
-        # monorepo or single => if success, build + remote update + publish all; else fail
         if not overall_success:
-            print("[release] Some tests failed in monorepo/single mode. Exiting.", file=sys.stderr)
+            print(f"[release] Tests failed in '{test_mode}' mode. Exiting.", file=sys.stderr)
             sys.exit(1)
 
-        print("[release] Tests passed. Building all packages ...")
+        # Build
+        print("[release] Tests passed. Building packages ...")
         build_ok = build_packages(
             file=args.file,
             directory=args.directory,
@@ -46,17 +54,8 @@ def run_release(args: Any) -> None:
             print("[release] Build failed. Exiting.", file=sys.stderr)
             sys.exit(1)
 
-        print("[release] Remote update ...")
-        remote_ok = remote_update_bulk(
-            file=args.file,
-            directory=args.directory,
-            recursive=args.recursive
-        )
-        if not remote_ok:
-            print("[release] Remote update failed. Exiting.", file=sys.stderr)
-            sys.exit(1)
-
-        print("[release] Publishing packages ...")
+        # Publish
+        print("[release] Publishing packages (no remote update in single/monorepo mode)...")
         repository = getattr(args, "repository", None)
         pub_ok = publish_packages(
             file=args.file,
@@ -74,74 +73,55 @@ def run_release(args: Any) -> None:
         return
 
     # ------------------------------------------------------------------
-    # If test_mode == "each", partial pass scenario:
-    # we check aggregator or multiple pyprojects, build/publish only those that pass
+    # If test_mode == 'each':
+    #   * Possibly aggregator-based. We skip updating the aggregator itself.
+    #   * We ONLY update pyproject.toml's in the temporary Git clones (git_temp_dir),
+    #     removing `git`, `branch`, `subdirectory`, `path` but preserving `optional` and
+    #     adding `version`.
+    #   * Then build/publish only subdirectories that actually passed tests.
     # ------------------------------------------------------------------
     if not details:
-        print("[release] No subpackages tested? Exiting.", file=sys.stderr)
+        print("[release] No test details found in 'each' mode. Exiting.", file=sys.stderr)
         sys.exit(1)
 
-    # We assume the first pyproject is the aggregator if aggregator is True
-    pyprojects = find_pyproject_files(args.file, args.directory, args.recursive)
-    if not pyprojects:
-        print("[release] No pyprojects found, can't proceed.", file=sys.stderr)
-        sys.exit(1)
-
-    aggregator_pyproj = pyprojects[0]
-    is_agg, agg_name = _check_if_aggregator(aggregator_pyproj)
-
-    # Collect a list of subpackage directories that passed
-    passed_dirs = [
-        d["directory"] for d in details if d["success"]
-    ]
+    passed_dirs = [d["directory"] for d in details if d["success"]]
     if not passed_dirs:
-        print("[release] All subpackages failed. Nothing to publish.", file=sys.stderr)
+        print("[release] All subpackages failed in 'each' mode. Nothing to publish.", file=sys.stderr)
         sys.exit(1)
 
-    # Remote update based on the presence of git_temp_dir
+    # We assume the first pyproject might be aggregator if aggregator is True,
+    # but we are not going to do a direct remote update on aggregator or local subdirs in the main repo.
+    pyprojects = find_pyproject_files(args.file, args.directory, args.recursive)
+    aggregator_pyproj = pyprojects[0] if pyprojects else None
+    is_agg, agg_name = _check_if_aggregator(aggregator_pyproj) if aggregator_pyproj else (False, "N/A")
+
+    # 1) Remote update is performed **only** on the temporary clone folder, if it exists
+    #    (i.e., if we had Git-based dependencies).
     if git_temp_dir:
-        print(f"[release] Git-based dependencies cloned to temporary directory: {git_temp_dir}")
-        print("[release] Performing remote update on cloned Git dependencies ...")
+        print(f"[release] Performing remote update on cloned Git dependencies at: {git_temp_dir}")
         ru_ok = remote_update_bulk(
             file=None,
             directory=git_temp_dir,
-            recursive=True
+            recursive=True,
+            output=None  # In-place in the temp folder
         )
         if not ru_ok:
-            print("[release] Remote update failed for cloned Git dependencies. Exiting.", file=sys.stderr)
+            print("[release] Remote update failed in the temporary directory. Exiting.", file=sys.stderr)
             sys.exit(1)
     else:
-        if is_agg:
-            print(f"[release] Aggregator '{agg_name}' detected. Doing aggregator-level remote update once ...")
-            ru_ok = remote_update_bulk(
-                file=aggregator_pyproj,
-                directory=None,  # Use aggregator's directory
-                recursive=False
-            )
-            if not ru_ok:
-                print("[release] Remote update failed. Exiting.", file=sys.stderr)
-                sys.exit(1)
-        else:
-            # If not aggregator, perform a remote update on all discovered pyprojects
-            print("[release] Non-aggregator. Performing remote update on all discovered pyprojects ...")
-            ru_ok = remote_update_bulk(
-                file=None,
-                directory=args.directory,
-                recursive=args.recursive
-            )
-            if not ru_ok:
-                print("[release] Remote update failed. Exiting.", file=sys.stderr)
-                sys.exit(1)
+        # If there's no git_temp_dir, we do nothing here. We skip aggregator updates on purpose.
+        print("[release] No temporary Git clone directory found. Skipping remote update of aggregator or local repos.")
 
-    # Now for each subpackage that passed, do a build & publish
-    # We'll skip aggregator itself, if aggregator is not meant to be published
+    # 2) Build & Publish only the subpackages that passed. Each `passed_dirs` item is
+    #    the absolute path where tests were run (which is presumably inside git_temp_dir if cloned).
+    #    Skip aggregator if aggregator is in the passed_dirs list.
     overall_publish_success = True
     for sub_dir in passed_dirs:
-        # If aggregator is the same dir, skip
-        if is_agg and (os.path.abspath(sub_dir) == os.path.dirname(aggregator_pyproj)):
-            print(f"[release] Skipping aggregator dir {sub_dir}.")
+        if is_agg and os.path.abspath(sub_dir) == os.path.dirname(aggregator_pyproj):
+            print(f"[release] Skipping aggregator dir {sub_dir} for build/publish.")
             continue
 
+        # Build
         print(f"\n[release] Building subpackage: {sub_dir}")
         build_rc = run_command(["poetry", "build"], cwd=sub_dir)
         if build_rc != 0:
@@ -149,10 +129,12 @@ def run_release(args: Any) -> None:
             overall_publish_success = False
             continue
 
+        # Publish
         print(f"[release] Publishing subpackage: {sub_dir}")
-        publish_cmd = ["poetry", "publish", '-vv']
+        publish_cmd = ["poetry", "publish", "-vv"]
         uname = "__token__"
         pwd = getattr(args, "publish_password", None)
+
         publish_cmd.extend(["--username", uname])
         if pwd:
             publish_cmd.extend(["--password", pwd])
@@ -166,4 +148,4 @@ def run_release(args: Any) -> None:
         print("[release] Some subpackages failed to build or publish.", file=sys.stderr)
         sys.exit(1)
 
-    print("\n[release] Done. All passing subpackages have been published.")
+    print("\n[release] Done. All passing subpackages have been published from the temporary folder.")

@@ -65,13 +65,12 @@ def fetch_remote_pyproject_version(
 def update_pyproject_with_versions(file_path: str) -> Optional[str]:
     """
     Reads a local pyproject.toml, and for each Git-based dependency:
-      - fetches the remote version (if possible),
-      - updates that dependency's version to ^<remote_version>,
-      - preserves original 'optional' status or extras membership.
+      - fetches the remote version,
+      - **removes** git/branch/subdirectory/path,
+      - preserves 'optional' if present,
+      - sets 'version' = ^<remote_version>.
 
-    Returns:
-      The updated TOML string (if changes made or not),
-      or None if an error occurred (like invalid structure).
+    Returns the updated TOML string or None if an error.
     """
     if not os.path.isfile(file_path):
         print(f"[remote_ops] File not found: {file_path}", file=sys.stderr)
@@ -84,79 +83,62 @@ def update_pyproject_with_versions(file_path: str) -> Optional[str]:
         print(f"[remote_ops] Error reading {file_path}: {e}", file=sys.stderr)
         return None
 
-    # Locate [tool.poetry] section
     tool_poetry = doc.get("tool", {}).get("poetry")
     if not tool_poetry:
         print(f"[remote_ops] Invalid pyproject structure in {file_path}. Missing [tool.poetry].", file=sys.stderr)
         return None
 
     dependencies = tool_poetry.get("dependencies", {})
-    # If [tool.poetry.extras] section exists, store it for references
     extras_section = tool_poetry.get("extras", {})
     had_extras = bool(extras_section)
 
     def dep_in_extras(dep_name: str) -> bool:
-        # Checks if dep_name is listed in any extras array
         for extra_deps in extras_section.values():
             if dep_name in extra_deps:
                 return True
         return False
 
-    # For each dependency, if it has "git", we attempt to fetch version
     updated_any = False
 
     for dep_name, details in list(dependencies.items()):
+        # Only handle Git-based dependencies
         if not (isinstance(details, dict) and "git" in details):
-            # not a git-based dependency
             continue
 
         git_url = details["git"]
         branch = details.get("branch", "main")
         subdir = details.get("subdirectory", "")
-        print(f"\n[remote_ops] Checking Git dep '{dep_name}' -> {git_url}@{branch} subdir='{subdir}'")
-
-        # Keep track of if it was originally optional
         originally_optional = bool(details.get("optional", False)) or dep_in_extras(dep_name)
 
+        print(f"\n[remote_ops] Checking Git dep '{dep_name}' -> {git_url}@{branch} subdir='{subdir}'")
         remote_ver = fetch_remote_pyproject_version(git_url, branch, subdir)
         if not remote_ver:
-            # If we fail to fetch a remote version, we won't force a change. 
-            # You could optionally mark them optional if you want, or skip entirely.
             print(f"  [remote_ops] Could not get remote version for '{dep_name}'. Skipping update.")
             continue
 
         print(f"  [remote_ops] Fetched remote version: {remote_ver}")
 
-        # Build a new inline table with ^version
+        # Build new inline dependency table:
         new_inline = inline_table()
         new_inline["version"] = f"^{remote_ver}"
-
-        # Preserve optional if it was originally optional
         if originally_optional:
             new_inline["optional"] = True
 
-        # We also preserve other keys like 'git', 'branch', 'subdirectory' if you want:
-        new_inline["git"] = git_url
-        if "branch" in details:
-            new_inline["branch"] = details["branch"]
-        if "subdirectory" in details:
-            new_inline["subdirectory"] = details["subdirectory"]
+        # We intentionally do NOT set git/branch/subdirectory/path anymore
+        # So everything like details["git"], details["branch"], details["path"] is removed.
 
-        # Update the dictionary
         dependencies[dep_name] = new_inline
         updated_any = True
 
-    # If no changes, just return the original content as TOML string
     if not updated_any:
         print(f"[remote_ops] No updates applied in {file_path}")
         return dumps(doc)
 
-    # Optionally clean extras so that each extra only references existing dependencies
+    # Clean up extras to ensure only valid dependencies remain
     if had_extras:
         for extra_name, extra_list in extras_section.items():
-            # remove anything that doesn't exist in dependencies now
             extras_section[extra_name] = [dep for dep in extra_list if dep in dependencies]
-        tool_poetry["extras"] = extras_section  # reassign
+        tool_poetry["extras"] = extras_section
 
     tool_poetry["dependencies"] = dependencies
     return dumps(doc)
@@ -164,16 +146,12 @@ def update_pyproject_with_versions(file_path: str) -> Optional[str]:
 
 def update_and_write_pyproject(input_file_path: str, output_file_path: Optional[str] = None) -> bool:
     """
-    Reads a pyproject.toml from input_file_path, updates Git deps with remote versions,
-    writes the result back to 'output_file_path' or overwrites the original.
-
-    Returns True on success (even if no changes), False on error.
+    (unchanged except that the new update_pyproject_with_versions logic removes the unwanted keys)
     """
     updated_doc_str = update_pyproject_with_versions(input_file_path)
     if updated_doc_str is None:
         return False
 
-    # If no output path, overwrite the original
     target = output_file_path or input_file_path
     try:
         with open(target, "w", encoding="utf-8") as f:

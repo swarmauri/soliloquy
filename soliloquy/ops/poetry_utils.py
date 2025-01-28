@@ -6,20 +6,22 @@ from typing import List, Optional
 
 def run_command(cmd: List[str], cwd: Optional[str] = None) -> int:
     """
-    Runs the given command (list of strings) in the specified working directory.
+    Runs the given command in the specified working directory.
     Returns the integer exit code (0 indicates success).
 
-    Args:
-        cmd: A list of command and arguments, e.g. ["poetry", "build"].
-        cwd: An optional directory in which to run the command. Defaults to None (current dir).
-
-    Example:
-        exit_code = run_command(["poetry", "install"], cwd="/path/to/package")
-        if exit_code != 0:
-            print("Command failed!")
+    We mask any PyPI tokens that start with 'pypi-' when printing.
     """
-    # Print the command for debugging
-    print(f"[poetry_utils] Running command: {' '.join(cmd)} (cwd={cwd or '.'})", flush=True)
+    # Build a safe-to-print version of the command, masking pypi- tokens
+    safe_cmd = []
+    for idx, arg in enumerate(cmd):
+        if arg.startswith("pypi-"):
+            # Mask the token
+            safe_cmd.append("pypi-****")
+        else:
+            safe_cmd.append(arg)
+
+    print(f"[poetry_utils] Running command: {' '.join(safe_cmd)} (cwd={cwd or '.'})", flush=True)
+
     try:
         process = subprocess.run(
             cmd,

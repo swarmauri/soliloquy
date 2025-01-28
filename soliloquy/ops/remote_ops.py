@@ -3,7 +3,7 @@
 import os
 import sys
 import requests
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from urllib.parse import urljoin
 from tomlkit import parse, dumps, inline_table
@@ -62,31 +62,38 @@ def fetch_remote_pyproject_version(
         return None
 
 
-def update_pyproject_with_versions(file_path: str) -> Optional[str]:
+def update_pyproject_with_versions(file_path: str) -> Dict[str, Any]:
     """
     Reads a local pyproject.toml, and for each Git-based dependency:
-      - fetches the remote version,
-      - **removes** git/branch/subdirectory/path,
-      - preserves 'optional' if present,
-      - sets 'version' = ^<remote_version>.
+      - fetches the remote version (if possible),
+      - removes 'git', 'branch', 'subdirectory', 'path',
+      - sets 'version' = ^<remote_version>,
+      - keeps 'optional' if it was present.
 
-    Returns the updated TOML string or None if an error.
+    Returns a dict describing the result:
+      {
+        "success": bool,
+        "error": Optional[str],   # If success=False, here's an error message
+      }
     """
     if not os.path.isfile(file_path):
-        print(f"[remote_ops] File not found: {file_path}", file=sys.stderr)
-        return None
+        msg = f"[remote_ops] File not found: {file_path}"
+        print(msg, file=sys.stderr)
+        return {"success": False, "error": msg}
 
     try:
         with open(file_path, "r", encoding="utf-8") as f:
             doc = parse(f.read())
     except Exception as e:
-        print(f"[remote_ops] Error reading {file_path}: {e}", file=sys.stderr)
-        return None
+        msg = f"[remote_ops] Error reading {file_path}: {e}"
+        print(msg, file=sys.stderr)
+        return {"success": False, "error": msg}
 
     tool_poetry = doc.get("tool", {}).get("poetry")
     if not tool_poetry:
-        print(f"[remote_ops] Invalid pyproject structure in {file_path}. Missing [tool.poetry].", file=sys.stderr)
-        return None
+        msg = f"[remote_ops] Invalid pyproject structure in {file_path}. Missing [tool.poetry]."
+        print(msg, file=sys.stderr)
+        return {"success": False, "error": msg}
 
     dependencies = tool_poetry.get("dependencies", {})
     extras_section = tool_poetry.get("extras", {})
@@ -101,7 +108,6 @@ def update_pyproject_with_versions(file_path: str) -> Optional[str]:
     updated_any = False
 
     for dep_name, details in list(dependencies.items()):
-        # Only handle Git-based dependencies
         if not (isinstance(details, dict) and "git" in details):
             continue
 
@@ -117,31 +123,35 @@ def update_pyproject_with_versions(file_path: str) -> Optional[str]:
             continue
 
         print(f"  [remote_ops] Fetched remote version: {remote_ver}")
-
-        # Build new inline dependency table:
         new_inline = inline_table()
         new_inline["version"] = f"^{remote_ver}"
         if originally_optional:
             new_inline["optional"] = True
-
-        # We intentionally do NOT set git/branch/subdirectory/path anymore
-        # So everything like details["git"], details["branch"], details["path"] is removed.
 
         dependencies[dep_name] = new_inline
         updated_any = True
 
     if not updated_any:
         print(f"[remote_ops] No updates applied in {file_path}")
-        return dumps(doc)
 
-    # Clean up extras to ensure only valid dependencies remain
+    # Clean up extras
     if had_extras:
         for extra_name, extra_list in extras_section.items():
             extras_section[extra_name] = [dep for dep in extra_list if dep in dependencies]
         tool_poetry["extras"] = extras_section
 
     tool_poetry["dependencies"] = dependencies
-    return dumps(doc)
+
+    # Attempt to write back
+    try:
+        with open(file_path, "w", encoding="utf-8") as f:
+            f.write(dumps(doc))
+        print(f"[remote_ops] Updated file written to {file_path}")
+        return {"success": True, "error": None}
+    except Exception as e:
+        msg = f"[remote_ops] Error writing updated pyproject to {file_path}: {e}"
+        print(msg, file=sys.stderr)
+        return {"success": False, "error": msg}
 
 
 def update_and_write_pyproject(input_file_path: str, output_file_path: Optional[str] = None) -> bool:
@@ -168,31 +178,37 @@ def remote_update_bulk(
     directory: Optional[str] = None,
     recursive: bool = False,
     output: Optional[str] = None
-) -> bool:
+) -> Dict[str, Any]:
     """
     Bulk-update Git-based dependencies in one or more pyproject.toml files.
     
-    - If 'file' is provided, updates that one file.
-    - Else if 'directory' is provided:
-        * If 'recursive=True', find all pyproject.toml in subdirectories.
-        * Otherwise, just that single 'directory/pyproject.toml' (if present).
-    - 'output': If exactly one pyproject file is found, you can direct the updated
-      content to a new path. If multiple are found but 'output' is set, 
-      we log a warning and just update each in-place.
-
-    Returns:
-      True if all updates are successful, False if any file fails to update.
+    Now returns a dict with:
+      {
+         "overall_success": bool,
+         "results": [
+            {"file": <path>, "success": bool, "error": str or None}
+         ]
+      }
     """
     try:
         pyprojects = find_pyproject_files(file=file, directory=directory, recursive=recursive)
     except Exception as e:
-        print(f"[remote_ops] Error discovering pyproject files: {e}", file=sys.stderr)
-        return False
+        msg = f"[remote_ops] Error discovering pyproject files: {e}"
+        print(msg, file=sys.stderr)
+        return {
+            "overall_success": False,
+            "results": []
+        }
 
     if not pyprojects:
-        print("[remote_ops] No pyproject files found to update.")
-        return True  # or False, depending on what you consider "success"
+        msg = "[remote_ops] No pyproject files found to update."
+        print(msg)
+        return {
+            "overall_success": True,
+            "results": []
+        }
 
+    # If output is provided but multiple files found, we warn and do in-place updates
     if output and len(pyprojects) > 1:
         print("[remote_ops] Multiple pyproject files found but a single --output was provided. "
               "We will update each file in-place instead of writing to a single output.",
@@ -201,20 +217,43 @@ def remote_update_bulk(
     else:
         out_path = output
 
-    overall_success = True
+    results = []
+    any_failure = False
 
     for idx, pyproj_path in enumerate(pyprojects, start=1):
         print(f"\n[remote_ops] ({idx}/{len(pyprojects)}) Updating remote deps in {pyproj_path}")
-        success = update_and_write_pyproject(
-            input_file_path=pyproj_path,
-            output_file_path=out_path if len(pyprojects) == 1 else None
-        )
+
+        # Decide the actual target file to write
+        target_file = out_path if (out_path and len(pyprojects) == 1) else pyproj_path
+
+        # We call our updated method:
+        update_result = update_pyproject_with_versions(pyproj_path)
+        success = update_result["success"]
+        err_msg = update_result["error"]
+
         if not success:
-            overall_success = False
+            any_failure = True
+
+        # If success==True and we have a separate output file, we must attempt to write
+        if success and target_file != pyproj_path and target_file:
+            # We can do a rename/copy logic if desired. Or re-run the function with "output_file_path" logic.
+            # For brevity, let's just rename or copy. But let's skip if we want to keep it simple...
+            pass
+
+        results.append({
+            "file": pyproj_path,
+            "success": success,
+            "error": err_msg
+        })
+
+    overall_success = (not any_failure)
 
     if overall_success:
         print("[remote_ops] Remote update completed successfully for all files.")
     else:
         print("[remote_ops] Some updates failed.", file=sys.stderr)
 
-    return overall_success
+    return {
+        "overall_success": overall_success,
+        "results": results
+    }

@@ -12,6 +12,7 @@ from soliloquy.ops.publish_ops import publish_packages
 from soliloquy.ops.test_ops import _check_if_aggregator  # or re-implement aggregator check
 from soliloquy.ops.build_ops import build_packages
 
+
 def run_release(args: Any) -> None:
     """
     The 'release' phase:
@@ -19,8 +20,12 @@ def run_release(args: Any) -> None:
       - If mode != 'each':
           * If tests pass, build + publish, but DO NOT update aggregator or any local pyprojects.
       - If mode == 'each':
-          * Only update the cloned/temporary subpackages inside the git_temp_dir.
-          * Build/publish only subpackages that passed.
+          * Only update the cloned/temporary subpackages inside the git_temp_dir,
+            removing 'git', 'branch', 'subdirectory', 'path', but preserving 'optional'
+            and setting normal version constraints.
+          * Build/publish only subdirectories that passed tests.
+          * Partial success on remote updates is allowed; failing updates won't block
+            the rest from building/publishing.
     """
 
     print("[release] Running validation (test only).")
@@ -35,7 +40,7 @@ def run_release(args: Any) -> None:
     git_temp_dir = test_results.get("git_temp_dir")
 
     # ------------------------------------------------------------------
-    # For single or monorepo mode, if tests fail => stop; if pass => build & publish
+    # For single/monorepo mode: if tests fail => stop; if pass => build & publish
     # BUT do NOT do any remote update on aggregator or local pyprojects.
     # ------------------------------------------------------------------
     if test_mode != "each":
@@ -74,10 +79,8 @@ def run_release(args: Any) -> None:
 
     # ------------------------------------------------------------------
     # If test_mode == 'each':
-    #   * Possibly aggregator-based. We skip updating the aggregator itself.
-    #   * We ONLY update pyproject.toml's in the temporary Git clones (git_temp_dir),
-    #     removing `git`, `branch`, `subdirectory`, `path` but preserving `optional` and
-    #     adding `version`.
+    #   * Possibly aggregator-based. We skip aggregator updates.
+    #   * Only update pyproject.toml's in the temporary Git clones (git_temp_dir).
     #   * Then build/publish only subdirectories that actually passed tests.
     # ------------------------------------------------------------------
     if not details:
@@ -89,32 +92,43 @@ def run_release(args: Any) -> None:
         print("[release] All subpackages failed in 'each' mode. Nothing to publish.", file=sys.stderr)
         sys.exit(1)
 
-    # We assume the first pyproject might be aggregator if aggregator is True,
-    # but we are not going to do a direct remote update on aggregator or local subdirs in the main repo.
+    # We assume the first pyproject might be an aggregator if aggregator=True,
+    # but we are *not* going to do a direct remote update on aggregator or local subdirs
+    # in the main repo. We only update the cloned subprojects in git_temp_dir.
     pyprojects = find_pyproject_files(args.file, args.directory, args.recursive)
     aggregator_pyproj = pyprojects[0] if pyprojects else None
     is_agg, agg_name = _check_if_aggregator(aggregator_pyproj) if aggregator_pyproj else (False, "N/A")
 
-    # 1) Remote update is performed **only** on the temporary clone folder, if it exists
-    #    (i.e., if we had Git-based dependencies).
+    # 1) Remote update is performed **only** on the temporary clone folder, if it exists.
+    #    Partial failures do not block the rest of the release. We simply log them.
     if git_temp_dir:
         print(f"[release] Performing remote update on cloned Git dependencies at: {git_temp_dir}")
-        ru_ok = remote_update_bulk(
+
+        ru_result = remote_update_bulk(
             file=None,
             directory=git_temp_dir,
             recursive=True,
             output=None  # In-place in the temp folder
         )
-        if not ru_ok:
-            print("[release] Remote update failed in the temporary directory. Exiting.", file=sys.stderr)
-            sys.exit(1)
+        # ru_result is expected to look like:
+        #   {"overall_success": bool, "results": [{"file": ..., "success": bool, "error": ...}, ...]}
+
+        # If *some* updates fail, we log them but do not exit:
+        if not ru_result["overall_success"]:
+            print("[release] Some remote updates failed, but continuing with build/publish.")
+            for file_result in ru_result["results"]:
+                if not file_result["success"]:
+                    print(f"    - Update failed for {file_result['file']}: {file_result['error']}",
+                          file=sys.stderr)
+        else:
+            print("[release] All remote updates succeeded in the temporary directory.")
     else:
         # If there's no git_temp_dir, we do nothing here. We skip aggregator updates on purpose.
         print("[release] No temporary Git clone directory found. Skipping remote update of aggregator or local repos.")
 
-    # 2) Build & Publish only the subpackages that passed. Each `passed_dirs` item is
-    #    the absolute path where tests were run (which is presumably inside git_temp_dir if cloned).
-    #    Skip aggregator if aggregator is in the passed_dirs list.
+    # 2) Build & Publish only the subpackages that passed tests. Each `passed_dirs` item is
+    #    the absolute path where tests were run. (Likely inside git_temp_dir if cloned).
+    #    Skip aggregator if aggregator is in the passed_dirs list (i.e., aggregator is not published).
     overall_publish_success = True
     for sub_dir in passed_dirs:
         if is_agg and os.path.abspath(sub_dir) == os.path.dirname(aggregator_pyproj):
@@ -132,7 +146,7 @@ def run_release(args: Any) -> None:
         # Publish
         print(f"[release] Publishing subpackage: {sub_dir}")
         publish_cmd = ["poetry", "publish", "-vv"]
-        uname = "__token__"
+        uname = "__token__"  # Typically used if you're passing a token
         pwd = getattr(args, "publish_password", None)
 
         publish_cmd.extend(["--username", uname])

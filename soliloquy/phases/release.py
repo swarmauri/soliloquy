@@ -39,19 +39,7 @@ def run_release(args: Any) -> None:
         print("[release] Remote update failed. Exiting.", file=sys.stderr)
         sys.exit(1)
 
-    # (3) Lock again post-update
-    # Because we changed pyproject files with new Git versions, let's lock them again.
-    print("[release] Locking after remote updates...")
-    lock_ok = lock_packages(
-        file=args.file,
-        directory=args.directory,
-        recursive=args.recursive
-    )
-    if not lock_ok:
-        print("[release] 'poetry lock' (post-update) failed. Exiting.", file=sys.stderr)
-        sys.exit(1)
-
-    # (4) Publish
+    # (3) Publish
     print("[release] Publishing packages to PyPI (or custom repo)...")
     repository = getattr(args, "repository", None)
     pub_ok = publish_packages(

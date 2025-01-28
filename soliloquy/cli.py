@@ -1,17 +1,17 @@
-# myworkflow/cli.py
+# soliloquy/cli.py
 
 import argparse
 import sys
 
 # Import the phases
-from myworkflow.phases.prepare import run_prepare
-from myworkflow.phases.install import run_install
-from myworkflow.phases.validate import run_validate
-from myworkflow.phases.release import run_release
+from soliloquy.phases.prepare import run_prepare
+from soliloquy.phases.install import run_install
+from soliloquy.phases.validate import run_validate
+from soliloquy.phases.release import run_release
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="myworkflow",
+        prog="soliloquy",
         description="A CLI for preparing, installing, validating, and releasing Python packages."
     )
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")

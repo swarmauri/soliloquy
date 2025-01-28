@@ -21,7 +21,7 @@ def run_release(args: Any) -> None:
     """
 
     # (1) Validate
-    print("[release] Running validation (includes 'poetry lock')...")
+    print("[release] Running validation...")
     try:
         run_validate(args)  # This may sys.exit(1) on failure
     except SystemExit as e:

@@ -7,6 +7,7 @@ from soliloquy.ops.test_ops import run_tests_with_mode
 from soliloquy.ops.analyze_ops import analyze_test_file
 from soliloquy.ops.build_ops import build_packages  # If you still have a build step here
 
+
 def run_validate(args: Any) -> Dict:
     """
     The 'validate' phase:
@@ -16,12 +17,13 @@ def run_validate(args: Any) -> Dict:
     Returns test results dictionary:
       {
         "success": bool,
-        "details": [...]
+        "details": [...],
+        "git_temp_dir": Optional[str],
       }
     """
 
     # 1) Test
-    # NOTE: read the no_cleanup flag
+    # Read the no_cleanup flag to determine whether to clean up temporary directories
     cleanup_bool = not getattr(args, "no_cleanup", False)
 
     print("[validate] Running tests (cleanup=%s)..." % cleanup_bool)
@@ -34,7 +36,7 @@ def run_validate(args: Any) -> Dict:
         cleanup=cleanup_bool
     )
 
-    # 2) Analyze if we have --results-json
+    # 2) Analyze if --results-json is provided
     results_json_file = getattr(args, "results_json", None)
     if results_json_file:
         print(f"[validate] Analyzing test results from {results_json_file} ...")
@@ -46,7 +48,7 @@ def run_validate(args: Any) -> Dict:
             required_passed=required_passed,
             required_skipped=required_skipped
         )
-        # If analysis fails, we consider overall success = False
+        # If analysis fails, set overall success to False
         if not analysis_ok:
             test_results["success"] = False
             print("[validate] Analysis indicates thresholds not met.")

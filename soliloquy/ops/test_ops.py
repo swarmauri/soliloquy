@@ -5,7 +5,7 @@ import sys
 import subprocess
 import tempfile
 import shutil
-from typing import Dict, List, Union, Tuple
+from typing import Dict, List, Union, Tuple, Optional
 
 import tomlkit
 
@@ -55,7 +55,7 @@ def run_tests_with_mode(
     mode: str = "single",
     num_workers: int = 1,
     cleanup: bool = True
-) -> Dict[str, Union[bool, List[Dict[str, Union[bool, int, str]]]]]:
+) -> Dict[str, Union[bool, List[Dict[str, Union[bool, int, str]]], Optional[str]]]:
     """
     Entry point to run tests according to a 'mode'.
 
@@ -70,11 +70,12 @@ def run_tests_with_mode(
       {
         "success": bool,            # True if all tests pass
         "details": List[dict],      # A list of test result dicts from run_pytests
+        "git_temp_dir": Optional[str],  # Path to the temporary directory with cloned git deps, if any
       }
     """
     if mode not in ("single", "monorepo", "each"):
         print(f"[test_ops] Invalid test mode: {mode}", file=sys.stderr)
-        return {"success": False, "details": []}
+        return {"success": False, "details": [], "git_temp_dir": None}
 
     # ------------------------------------------------------
     # Discover pyprojects
@@ -83,14 +84,14 @@ def run_tests_with_mode(
         pyprojects = find_pyproject_files(file, directory, recursive)
     except Exception as e:
         print(f"[test_ops] Error finding pyproject files: {e}", file=sys.stderr)
-        return {"success": False, "details": []}
+        return {"success": False, "details": [], "git_temp_dir": None}
 
     # If no pyproject found, fallback to single test in the directory
     if not pyprojects:
         print("[test_ops] No pyproject.toml found. Running single test in the specified directory.")
         test_dir = directory or "."
         result = run_pytests(test_dir, num_workers)
-        return {"success": result["success"], "details": [result]}
+        return {"success": result["success"], "details": [result], "git_temp_dir": None}
 
     # We'll consider the first pyproject as "primary" unless mode=each.
     primary_pyproj = pyprojects[0]
@@ -103,7 +104,7 @@ def run_tests_with_mode(
         # Just run 1 test in the directory (like a standalone approach)
         test_dir = directory or os.path.dirname(primary_pyproj)
         result = run_pytests(test_dir, num_workers)
-        return {"success": result["success"], "details": [result]}
+        return {"success": result["success"], "details": [result], "git_temp_dir": None}
 
     # ------------------------------------------------------
     # Mode: monorepo
@@ -112,7 +113,7 @@ def run_tests_with_mode(
         # Run a single test from the top-level directory (like one big combined run)
         test_dir = directory or os.path.dirname(primary_pyproj)
         result = run_pytests(test_dir, num_workers)
-        return {"success": result["success"], "details": [result]}
+        return {"success": result["success"], "details": [result], "git_temp_dir": None}
 
     # ------------------------------------------------------
     # Mode: each
@@ -122,6 +123,7 @@ def run_tests_with_mode(
         # else => fallback to scanning multiple pyprojects
         all_passed = True
         details: List[Dict[str, Union[bool, int, str]]] = []
+        git_temp_dir: Optional[str] = None  # To store the temp directory path if any
 
         if aggregator:
             print(f"[test_ops] Aggregator detected ('package-mode=false'), testing each path dependency individually.")
@@ -146,7 +148,7 @@ def run_tests_with_mode(
             if git_deps:
                 # We'll clone them into a single temp folder,
                 # run tests in each subdirectory that has a pyproject.toml.
-                git_ok = _test_git_deps(git_deps, details, num_workers, cleanup)
+                git_ok, git_tmp_dir = _test_git_deps(git_deps, details, num_workers, cleanup)
                 if not git_ok:
                     all_passed = False
 
@@ -160,7 +162,7 @@ def run_tests_with_mode(
                 if not r["success"]:
                     all_passed = False
 
-        return {"success": all_passed, "details": details}
+        return {"success": all_passed, "details": details, "git_temp_dir": git_temp_dir}
 
 
 def _check_if_aggregator(pyproj_path: str) -> (bool, str):
@@ -190,23 +192,20 @@ def _test_git_deps(
     git_deps: dict,
     details: List[Dict[str, Union[bool, int, str]]],
     num_workers: int,
-    cleanup: bool = True,  # NEW
-) -> bool:
+    cleanup: bool = True,
+) -> Tuple[bool, Optional[str]]:
     """
-    Clones each Git-based dependency, then runs tests (by:
-      1) 'poetry install' in that subdirectory (optional),
-      2) 'poetry run pytest' in that subdirectory.
-
-    If cleanup=False, we do NOT remove the temporary directory,
-    enabling the caller to reuse it for subsequent steps.
-
-    Returns True if all tests pass, otherwise False.
+    Clones each Git-based dependency, then runs tests on each subdirectory.
+    Returns:
+      (all_passed, temp_dir)
+        - all_passed: bool (True if all tests pass)
+        - temp_dir: The path to the temporary clone folder, or None if it was cleaned up.
     """
     import tempfile
     import shutil
     from collections import defaultdict
 
-    # group by (git_url, branch)
+    # Group by (git_url, branch)
     grouped = defaultdict(list)
     for dep_name, config in git_deps.items():
         git_url = config.get("git")
@@ -215,7 +214,7 @@ def _test_git_deps(
         grouped[(git_url, branch)].append((dep_name, subdir))
 
     if not grouped:
-        return True
+        return True, None
 
     print(f"[test_ops] Found {len(git_deps)} Git dependencies to test. Cloning & testing each subdir ...")
 
@@ -261,13 +260,10 @@ def _test_git_deps(
                 details.append(test_result)
                 if not test_result["success"]:
                     all_passed = False
-
     finally:
-        # Only remove the temp directory if cleanup is True
         if cleanup:
             shutil.rmtree(build_root, ignore_errors=True)
             print(f"[test_ops] Cleaned up temporary test directory: {build_root}")
-        else:
-            print(f"[test_ops] Skipping cleanup of {build_root} (cleanup=False).")
+            build_root = None
 
-    return all_passed
+    return all_passed, build_root

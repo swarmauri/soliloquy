@@ -34,7 +34,7 @@ def run_validate(args: Any) -> Dict:
         cleanup=cleanup_bool
     )
 
-    # 2) Analyze if you have results JSON
+    # 2) Analyze if we have --results-json
     results_json_file = getattr(args, "results_json", None)
     if results_json_file:
         print(f"[validate] Analyzing test results from {results_json_file} ...")
@@ -46,14 +46,10 @@ def run_validate(args: Any) -> Dict:
             required_passed=required_passed,
             required_skipped=required_skipped
         )
+        # If analysis fails, we consider overall success = False
         if not analysis_ok:
             test_results["success"] = False
-            print("[validate] Analysis thresholds not met. Exiting with code 1.")
-            sys.exit(1)
+            print("[validate] Analysis indicates thresholds not met.")
 
-    if not test_results["success"]:
-        print("[validate] Some tests failed. Exiting with code 1.")
-        sys.exit(1)
-
-    print("[validate] Completed successfully.")
+    print("[validate] Completed with success =", test_results["success"])
     return test_results

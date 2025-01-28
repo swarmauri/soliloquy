@@ -5,41 +5,48 @@ from typing import Any, Dict
 
 from soliloquy.ops.test_ops import run_tests_with_mode
 from soliloquy.ops.analyze_ops import analyze_test_file
-
+from soliloquy.ops.build_ops import build_packages  # If you still have a build step here
 
 def run_validate(args: Any) -> Dict:
     """
     The 'validate' phase:
-      1. Test
-      2. Analyze (optional if --results-json is provided)
+      1. Build (if you still have it)
+      2. Test
+      3. Analyze
 
-    Returns a dictionary with detailed test results:
+    Returns test results dictionary:
       {
-        "success": bool,  # True if all subpackages passed, else False
-        "details": [
-          {
-            "success": bool,
-            "returncode": int,
-            "directory": str,
-          },
-          ...
-        ]
+        "success": bool,
+        "details": [...]
       }
-
-    The caller (e.g. release) can then decide what to do per-package.
     """
-    print("[validate] Running tests...")
 
-    # 1) Test
+    # Possibly build step first (if your design includes build in validate):
+    print("[validate] Building packages...")
+    build_ok = build_packages(
+        file=args.file,
+        directory=args.directory,
+        recursive=args.recursive
+    )
+    if not build_ok:
+        print("[validate] Build failed. Exiting.", file=sys.stderr)
+        sys.exit(1)
+
+    # 2) Test
+    # NOTE: read the no_cleanup flag
+    cleanup_bool = not getattr(args, "no_cleanup", False)
+
+    print("[validate] Running tests (cleanup=%s)..." % cleanup_bool)
     test_results = run_tests_with_mode(
         file=args.file,
         directory=args.directory,
         recursive=args.recursive,
-        mode=args.test_mode,
-        num_workers=args.num_workers
+        mode=getattr(args, "test_mode", "single"),
+        num_workers=getattr(args, "num_workers", 1),
+        cleanup=cleanup_bool
     )
 
-    # 2) Analyze if we have --results-json
+    # 3) Analyze if you have results JSON
     results_json_file = getattr(args, "results_json", None)
     if results_json_file:
         print(f"[validate] Analyzing test results from {results_json_file} ...")
@@ -51,10 +58,14 @@ def run_validate(args: Any) -> Dict:
             required_passed=required_passed,
             required_skipped=required_skipped
         )
-        # If analysis fails, we consider overall success = False
         if not analysis_ok:
             test_results["success"] = False
-            print("[validate] Analysis indicates thresholds not met.")
+            print("[validate] Analysis thresholds not met. Exiting with code 1.")
+            sys.exit(1)
 
-    print("[validate] Completed with success =", test_results["success"])
+    if not test_results["success"]:
+        print("[validate] Some tests failed. Exiting with code 1.")
+        sys.exit(1)
+
+    print("[validate] Completed successfully.")
     return test_results

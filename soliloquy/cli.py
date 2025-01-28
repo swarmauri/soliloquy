@@ -1,9 +1,9 @@
-# soliloquy/cli.py
+# myworkflow/cli.py
 
 import argparse
 import sys
 
-# Import the phases
+# phases
 from soliloquy.phases.prepare import run_prepare
 from soliloquy.phases.install import run_install
 from soliloquy.phases.validate import run_validate
@@ -12,16 +12,16 @@ from soliloquy.phases.release import run_release
 def main():
     parser = argparse.ArgumentParser(
         prog="soliloquy",
-        description="A CLI for preparing, installing, validating, and releasing Python packages."
+        description="CLI for preparing, installing, validating, and releasing Python packages."
     )
     subparsers = parser.add_subparsers(dest="command", required=True, help="Available commands")
 
     # -------------------------------------------------------------------------
     # prepare
     # -------------------------------------------------------------------------
-    prepare_parser = subparsers.add_parser("prepare", help="Bump/set version, lint, commit.")
+    prepare_parser = subparsers.add_parser("prepare", help="Bump/set version, lint, and commit changes.")
     prepare_parser.add_argument("-f", "--file", help="Path to a single pyproject.toml.")
-    prepare_parser.add_argument("-d", "--directory", help="Directory containing pyprojects or aggregator.")
+    prepare_parser.add_argument("-d", "--directory", help="Directory containing one or more pyproject.toml.")
     prepare_parser.add_argument("-R", "--recursive", action="store_true", help="Recursively find pyproject.toml files.")
     prepare_parser.add_argument("--bump", choices=["major","minor","patch","finalize"], help="Type of version bump.")
     prepare_parser.add_argument("--set-ver", help="Explicit version to set, e.g. '2.0.0.dev1'.")
@@ -44,10 +44,12 @@ def main():
     validate_parser.add_argument("-R", "--recursive", action="store_true", help="Recursively find pyproject.toml files.")
     validate_parser.add_argument("--test-mode", choices=["single","monorepo","each"], default="single",
                                  help="How to run tests.")
-    validate_parser.add_argument("--num-workers", type=int, default=1, help="Parallel pytest workers.")
+    validate_parser.add_argument("--num-workers", type=int, default=1, help="Number of parallel pytest workers.")
     validate_parser.add_argument("--results-json", help="Path to a JSON test-results file for analysis.")
     validate_parser.add_argument("--required-passed", help="e.g. 'ge:80'.")
     validate_parser.add_argument("--required-skipped", help="e.g. 'lt:10'.")
+    validate_parser.add_argument("--no-cleanup", action="store_true",
+                                 help="If set, do NOT remove the temporary test directory for Git-based deps.")
 
     # -------------------------------------------------------------------------
     # release
@@ -61,14 +63,15 @@ def main():
     release_parser.add_argument("--results-json", help="JSON test-results file for analysis.")
     release_parser.add_argument("--required-passed", help="e.g. 'ge:80'.")
     release_parser.add_argument("--required-skipped", help="e.g. 'lt:10'.")
+
     release_parser.add_argument("--publish-username", help="PyPI username.")
     release_parser.add_argument("--publish-password", help="PyPI password.")
     release_parser.add_argument("--repository", help="Custom Poetry repository name.")
+    release_parser.add_argument("--no-cleanup", action="store_true",
+                                help="If set, do NOT remove the temporary test directory for Git-based deps.")
 
-    # Parse arguments
     args = parser.parse_args()
 
-    # Dispatch
     if args.command == "prepare":
         run_prepare(args)
     elif args.command == "install":

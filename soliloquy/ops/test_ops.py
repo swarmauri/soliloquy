@@ -53,7 +53,8 @@ def run_tests_with_mode(
     directory: str = None,
     recursive: bool = False,
     mode: str = "single",
-    num_workers: int = 1
+    num_workers: int = 1,
+    cleanup: bool = True
 ) -> Dict[str, Union[bool, List[Dict[str, Union[bool, int, str]]]]]:
     """
     Entry point to run tests according to a 'mode'.
@@ -145,7 +146,7 @@ def run_tests_with_mode(
             if git_deps:
                 # We'll clone them into a single temp folder,
                 # run tests in each subdirectory that has a pyproject.toml.
-                git_ok = _test_git_deps(git_deps, details, num_workers)
+                git_ok = _test_git_deps(git_deps, details, num_workers, cleanup)
                 if not git_ok:
                     all_passed = False
 
@@ -188,22 +189,21 @@ def _check_if_aggregator(pyproj_path: str) -> (bool, str):
 def _test_git_deps(
     git_deps: dict,
     details: List[Dict[str, Union[bool, int, str]]],
-    num_workers: int
+    num_workers: int,
+    cleanup: bool = True,  # NEW
 ) -> bool:
     """
     Clones each Git-based dependency, then runs tests (by:
-      1) Possibly 'poetry install' in that subdirectory,
-      2) 'poetry run pytest' in that subdirectory
-    We group them by (git_url, branch) to clone once, then test each 'subdirectory'.
+      1) 'poetry install' in that subdirectory (optional),
+      2) 'poetry run pytest' in that subdirectory.
 
-    :param git_deps: The dictionary from extract_git_dependencies(...) => {dep_name: {...}, ...}
-    :param details: A list to append test result dicts to
-    :param num_workers: For parallel pytest
-    :return: True if all tests pass, otherwise False
+    If cleanup=False, we do NOT remove the temporary directory,
+    enabling the caller to reuse it for subsequent steps.
+
+    Returns True if all tests pass, otherwise False.
     """
     import tempfile
     import shutil
-
     from collections import defaultdict
 
     # group by (git_url, branch)
@@ -220,7 +220,6 @@ def _test_git_deps(
     print(f"[test_ops] Found {len(git_deps)} Git dependencies to test. Cloning & testing each subdir ...")
 
     all_passed = True
-    # We'll create a single temp folder for all clones
     build_root = tempfile.mkdtemp(prefix="mono_test_")
     print(f"[test_ops] Using temporary directory for Git-based tests: {build_root}")
 
@@ -245,7 +244,7 @@ def _test_git_deps(
 
             # For each subdirectory in that repo, do a test run
             for (dep_name, subdir) in sub_pkgs:
-                test_path = os.path.join(clone_dir, subdir)
+                test_path = os.path.join(clone_dir, *subdir.split("/"))  # ensure cross-platform
                 pyproj_file = os.path.join(test_path, "pyproject.toml")
                 if not os.path.isdir(test_path):
                     print(f"  [test_ops][{dep_name}] Subdirectory '{subdir}' not found.", file=sys.stderr)
@@ -256,14 +255,12 @@ def _test_git_deps(
                     all_passed = False
                     continue
 
-                # # Optionally do a 'poetry install'
-                # # If your tests need dependencies installed, do so:
-                # install_rc = run_command(["poetry", "install"], cwd=test_path)
-                # if install_rc != 0:
-                #     print(f"    [test_ops][{dep_name}] 'poetry install' failed in {test_path}.", file=sys.stderr)
-                #     all_passed = False
-                #     # We can still attempt tests or skip. Let's skip:
-                #     continue
+                # (optional) 'poetry install' if you want dependencies installed
+                install_rc = run_command(["poetry", "install"], cwd=test_path)
+                if install_rc != 0:
+                    print(f"    [test_ops][{dep_name}] 'poetry install' failed in {test_path}.", file=sys.stderr)
+                    all_passed = False
+                    continue
 
                 # Now run tests
                 print(f"  [test_ops][{dep_name}] Running tests in {test_path}")
@@ -273,8 +270,11 @@ def _test_git_deps(
                     all_passed = False
 
     finally:
-        # Remove the temporary directory
-        shutil.rmtree(build_root, ignore_errors=True)
-        print(f"[test_ops] Cleaned up temporary test directory: {build_root}")
+        # Only remove the temp directory if cleanup is True
+        if cleanup:
+            shutil.rmtree(build_root, ignore_errors=True)
+            print(f"[test_ops] Cleaned up temporary test directory: {build_root}")
+        else:
+            print(f"[test_ops] Skipping cleanup of {build_root} (cleanup=False).")
 
     return all_passed

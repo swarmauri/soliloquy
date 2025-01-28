@@ -126,4 +126,3 @@ def _run_poetry_build(package_dir: str) -> bool:
         print(f"      Build failed in {package_dir} (exit code {rc}).", file=sys.stderr)
         return False
     return True
-_

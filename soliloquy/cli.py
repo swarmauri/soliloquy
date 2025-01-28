@@ -66,7 +66,6 @@ def main():
 
     release_parser.add_argument("--publish-username", help="PyPI username.")
     release_parser.add_argument("--publish-password", help="PyPI password.")
-    release_parser.add_argument("--repository", help="Custom Poetry repository name.")
     release_parser.add_argument("--no-cleanup", action="store_true",
                                 help="If set, do NOT remove the temporary test directory for Git-based deps.")
 

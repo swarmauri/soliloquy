@@ -134,10 +134,7 @@ def run_release(args: Any) -> None:
             continue
 
         print(f"[release] Publishing subpackage: {sub_dir}")
-        publish_cmd = ["poetry", "publish"]
-        repo = getattr(args, "repository", None)
-        if repo:
-            publish_cmd.extend(["--repository", repo])
+        publish_cmd = ["poetry", "publish", '-vv']
         uname = getattr(args, "publish_username", None)
         pwd = getattr(args, "publish_password", None)
         if uname:

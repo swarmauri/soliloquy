@@ -256,14 +256,14 @@ def _test_git_deps(
                     all_passed = False
                     continue
 
-                # Optionally do a 'poetry install'
-                # If your tests need dependencies installed, do so:
-                install_rc = run_command(["poetry", "install"], cwd=test_path)
-                if install_rc != 0:
-                    print(f"    [test_ops][{dep_name}] 'poetry install' failed in {test_path}.", file=sys.stderr)
-                    all_passed = False
-                    # We can still attempt tests or skip. Let's skip:
-                    continue
+                # # Optionally do a 'poetry install'
+                # # If your tests need dependencies installed, do so:
+                # install_rc = run_command(["poetry", "install"], cwd=test_path)
+                # if install_rc != 0:
+                #     print(f"    [test_ops][{dep_name}] 'poetry install' failed in {test_path}.", file=sys.stderr)
+                #     all_passed = False
+                #     # We can still attempt tests or skip. Let's skip:
+                #     continue
 
                 # Now run tests
                 print(f"  [test_ops][{dep_name}] Running tests in {test_path}")

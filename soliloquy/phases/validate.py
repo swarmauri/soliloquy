@@ -1,7 +1,7 @@
 # soliloquy/phases/validate.py
 
 import sys
-from typing import Any
+from typing import Any, Dict
 
 from soliloquy.ops.test_ops import run_tests_with_mode
 from soliloquy.ops.analyze_ops import analyze_test_file

@@ -10,9 +10,8 @@ from soliloquy.ops.build_ops import build_packages  # If you still have a build 
 def run_validate(args: Any) -> Dict:
     """
     The 'validate' phase:
-      1. Build (if you still have it)
-      2. Test
-      3. Analyze
+      1. Test
+      2. Analyze
 
     Returns test results dictionary:
       {
@@ -21,18 +20,7 @@ def run_validate(args: Any) -> Dict:
       }
     """
 
-    # Possibly build step first (if your design includes build in validate):
-    print("[validate] Building packages...")
-    build_ok = build_packages(
-        file=args.file,
-        directory=args.directory,
-        recursive=args.recursive
-    )
-    if not build_ok:
-        print("[validate] Build failed. Exiting.", file=sys.stderr)
-        sys.exit(1)
-
-    # 2) Test
+    # 1) Test
     # NOTE: read the no_cleanup flag
     cleanup_bool = not getattr(args, "no_cleanup", False)
 
@@ -46,7 +34,7 @@ def run_validate(args: Any) -> Dict:
         cleanup=cleanup_bool
     )
 
-    # 3) Analyze if you have results JSON
+    # 2) Analyze if you have results JSON
     results_json_file = getattr(args, "results_json", None)
     if results_json_file:
         print(f"[validate] Analyzing test results from {results_json_file} ...")

@@ -40,8 +40,8 @@ def main():
     validate_parser.add_argument("--num-workers", type=int, default=1, help="Number of parallel pytest workers.")
     # Analysis
     validate_parser.add_argument("--results-json", help="Path to a JSON test-results file for analysis.")
-    validate_parser.add_argument("--required-passed", help="e.g. 'ge:80' => require at least 80% passed.")
-    validate_parser.add_argument("--required-skipped", help="e.g. 'lt:10' => require fewer than 10% skipped.")
+    validate_parser.add_argument("--required-passed", help="e.g. 'ge:80' => require at least 80% test cases passed.")
+    validate_parser.add_argument("--required-skipped", help="e.g. 'lt:10' => require fewer than 10% test cases skipped.")
 
     # -------------------------------------------------------------------------
     # release

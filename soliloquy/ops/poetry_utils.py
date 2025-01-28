@@ -22,7 +22,7 @@ def run_command(cmd: List[str], cwd: Optional[str] = None) -> int:
     print(f"[poetry_utils] Running command: {' '.join(cmd)} (cwd={cwd or '.'})", flush=True)
     try:
         process = subprocess.run(
-            command_args,
+            cmd,
             cwd=cwd,
             text=True,
             capture_output=True,

@@ -20,7 +20,7 @@ from soliloquy import version_ops
 from soliloquy import remote_ops
 from soliloquy import eval_ops
 from soliloquy import pyproject_ops
-
+from soliloquy import test_ops
 
 def resolve_targets(directory: str = None,
                     file: str = None,
@@ -188,10 +188,34 @@ def handle_remote(args):
             sys.exit(1)
 
 
+
 def handle_test(args):
-    # Run tests using pytest (with optional parallelism)
+    """
+    Enhanced 'test' command handler that supports:
+      --mode=monorepo | each | single
+    """
     try:
-        poetry_ops.run_pytests(test_directory=args.dir, num_workers=args.num_workers)
+        if args.mode == "monorepo":
+            # Run a single pytest invocation for the entire monorepo
+            test_ops.run_monorepo_tests(
+                root_dir=args.dir,
+                num_workers=args.num_workers
+            )
+
+        elif args.mode == "each":
+            # Discover subpackages and run each individually
+            test_ops.run_subpackage_tests(
+                root_dir=args.dir,
+                num_workers=args.num_workers
+            )
+
+        else:  # "single" (the default)
+            # The existing logic: run tests in `args.dir` or current dir
+            poetry_ops.run_pytests(
+                test_directory=args.dir,
+                num_workers=args.num_workers
+            )
+
     except Exception as e:
         print(f"Error in test command: {e}", file=sys.stderr)
         sys.exit(1)
@@ -371,7 +395,13 @@ def main():
     test_parser = subparsers.add_parser("test", help="Run tests using pytest")
     test_parser.add_argument("-d", "--dir", type=str, default=".", help="Directory to run tests (default: .)")
     test_parser.add_argument("--num-workers", type=int, default=1, help="Number of parallel workers")
-
+    test_parser.add_argument(
+        "--mode",
+        choices=["single", "monorepo", "each"],
+        default="single",
+        help="Testing mode: single package, entire monorepo, or each subpackage. (default: single)"
+    )
+    
     # analyze
     analyze_parser = subparsers.add_parser("analyze", help="Analyze test results from a JSON file")
     analyze_parser.add_argument("-f", "--file", help="Path to the JSON file with test results", required=True)

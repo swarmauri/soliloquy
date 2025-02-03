@@ -1,20 +1,4 @@
 <p align="center">
-    <a href="https://github.com/swarmauri/swarmauri-sdk/"><img src="https://res.cloudinary.com/dbjmpekvl/image/upload/v1730099724/Swarmauri-logo-lockup-2048x757_hww01w.png" alt="Swamauri Logo"/></a>
-    <br />
-    <a href="https://hits.sh/github.com/swarmauri/soliloquy/"><img src="https://hits.sh/github.com/swarmauri/soliloquy.svg" alt="Hits"/></a>
-    <a href="https://opensource.org/licenses/Apache-2.0"><img src="https://img.shields.io/badge/License-Apache_2.0-blue.svg" alt="License"/></a>
-    <a href="https://pypi.org/project/soliloquy/"><img src="https://img.shields.io/pypi/v/soliloquy?label=soliloquy" alt="PyPI - soliloquy Version"/></a>
-    <a href="https://pypi.org/project/soliloquy/"><img src="https://img.shields.io/pypi/dm/soliloquy?label=soliloquy%20Downloads" alt="PyPI - soliloquy Downloads"/></a>
-    <br />
-    <img src="https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&labelColor=black" alt="Python"/>
-</p>
-
-
-Below is a complete example of a `README.md` for your Soliloquy project:
-
----
-
-<p align="center">
   <a href="https://github.com/swarmauri/swarmauri-sdk/">
     <img src="https://res.cloudinary.com/dbjmpekvl/image/upload/v1730099724/Swarmauri-logo-lockup-2048x757_hww01w.png" alt="Swamauri Logo"/>
   </a>

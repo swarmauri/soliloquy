@@ -24,7 +24,7 @@ def run_ruff_lint(
     directories = [os.path.abspath(d) for d in directories]
 
     # Build the Ruff command. Example: ruff check <dir1> <dir2> ...
-    cmd = ["poetry", "ruff", "check"] + directories
+    cmd = ["ruff", "check"] + directories
     if fix:
         cmd.append("--fix")
 

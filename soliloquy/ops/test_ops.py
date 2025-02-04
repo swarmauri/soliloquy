@@ -37,10 +37,7 @@ def run_pytests(
         cmd.extend([
             "-n", 
             str(num_workers), 
-            "--dist=loadfile", 
-            "--tb=short", 
-            "--json-report", 
-            "--json-report-file=pytest_results.json"
+            "--dist=loadfile"
             ])
     print(f"[test_ops] Running tests in {test_directory} -> {' '.join(cmd)}")
 

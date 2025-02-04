@@ -33,6 +33,7 @@ jobs:
       - name: Install dependencies
         run: |
           cd ${{ matrix.pkg-dir }}
+          poetry lock
           poetry install --no-cache -vv
 
       - name: Lint with flake8

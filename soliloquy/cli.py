@@ -39,6 +39,17 @@ def main():
         help="If set, do not exit on lint errors (i.e. exit_on_error=False)."
     )
 
+    prepare_parser.add_argument(
+        "--disable-lint",
+        action="store_true",
+        help="Disable the lint step."
+    )
+    prepare_parser.add_argument(
+        "--disable-format",
+        action="store_true",
+        help="Disable the format step."
+    )
+
     # -------------------------------------------------------------------------
     # install
     # -------------------------------------------------------------------------

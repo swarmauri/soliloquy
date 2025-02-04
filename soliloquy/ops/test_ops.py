@@ -37,7 +37,7 @@ def run_pytests(
         cmd.extend([
             "-n", 
             str(num_workers), 
-            "---dist=loadfile", 
+            "--dist=loadfile", 
             "--tb=short", 
             "--json-report", 
             "--json-report-file=pytest_results.json"

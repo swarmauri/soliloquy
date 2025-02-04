@@ -85,7 +85,7 @@ def _check_if_aggregator(pyproj_path: str) -> (bool, str):
     is_aggregator = (pkg_mode is False)
     return is_aggregator, pkg_name
 
-def _run_poetry_install(package_dir: str, extras: bool) -> bool:
+def _run_poetry_install(package_dir: str, extras: bool = True) -> bool:
     """
     Helper that runs 'poetry install' in the given directory.
     Returns True if successful, False otherwise.

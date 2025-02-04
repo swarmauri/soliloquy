@@ -34,7 +34,14 @@ def run_pytests(
     """
     cmd = ["poetry", "run", "pytest"]
     if num_workers > 1:
-        cmd.extend(["-n", str(num_workers)])
+        cmd.extend([
+            "-n", 
+            str(num_workers), 
+            "---dist=loadfile", 
+            "--tb=short", 
+            "--json-report", 
+            "--json-report-file=pytest_results.json"
+            ])
     print(f"[test_ops] Running tests in {test_directory} -> {' '.join(cmd)}")
 
     # Here we directly call subprocess, but you could also use run_command(...) if desired.

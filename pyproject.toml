@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "soliloquy"
-version = "0.1.1.dev63"
+version = "0.1.1.dev64"
 description = "A CLI for managing a monorepo."
 authors = ["Jacob Stewart <jacob@swarmauri.com>"]
 license = "Apache2"

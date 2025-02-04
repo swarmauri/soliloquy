@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "soliloquy"
-version = "0.1.1.dev51"
+version = "0.1.1.dev52"
 description = "A CLI for managing a monorepo."
 authors = ["Jacob Stewart <jacob@swarmauri.com>"]
 license = "Apache2"
@@ -16,7 +16,6 @@ pytest = "^8.3.4"
 pytest-xdist = "^3.6.1"
 pytest-asyncio = ">=0.24.0"
 pytest-timeout = "^2.3.1"
-pytest-xdist = "^3.6.1"
 pytest-json-report = "^1.5.0"
 python-dotenv = "^1.0.0"
 jsonschema = "^4.18.5"

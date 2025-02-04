@@ -27,6 +27,18 @@ def main():
     prepare_parser.add_argument("--set-ver", help="Explicit version to set, e.g. '2.0.0.dev1'.")
     prepare_parser.add_argument("--commit-msg", default="chore: prepare changes", help="Git commit message.")
 
+    # Flags for linting options:
+    prepare_parser.add_argument(
+        "--lint-fix",
+        action="store_true",
+        help="If set, run Ruff with auto-fixing enabled (i.e. --fix)."
+    )
+    prepare_parser.add_argument(
+        "--lint-no-exit",
+        action="store_true",
+        help="If set, do not exit on lint errors (i.e. exit_on_error=False)."
+    )
+
     # -------------------------------------------------------------------------
     # install
     # -------------------------------------------------------------------------

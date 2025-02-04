@@ -7,8 +7,8 @@ from typing import List, Optional
 
 def run_ruff_lint(
     directories: Optional[List[str]] = None,
-    fix: bool = False,
-    exit_on_error: bool = True
+    fix: bool = True,
+    exit_on_error: bool = False
 ) -> bool:
     """
     Runs Ruff lint checks on one or more directories.
@@ -24,7 +24,7 @@ def run_ruff_lint(
     directories = [os.path.abspath(d) for d in directories]
 
     # Build the Ruff command. Example: ruff check <dir1> <dir2> ...
-    cmd = ["ruff", "check"] + directories
+    cmd = ["poetry", "ruff", "check"] + directories
     if fix:
         cmd.append("--fix")
 

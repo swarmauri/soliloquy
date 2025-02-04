@@ -11,19 +11,20 @@ from soliloquy.ops.git_ops import git_commit_all_changes
 def run_prepare(args: Any) -> None:
     """
     The 'prepare' phase:
-
       1. Bump or set version (recursively if requested)
-      2. Lint + autofix
+      2. Lint + autofix (if enabled by CLI flags)
       3. Git commit changes
 
-    This function expects to be called with an 'args' object that has:
-      - args.file (optional, for a single pyproject.toml)
-      - args.directory (optional, for a directory of packages or aggregator)
+    Expects args to have:
+      - args.file (optional)
+      - args.directory (optional)
       - args.recursive (bool)
-      - args.bump (string or None)
-      - args.set_ver (string or None)
-      - args.commit_msg (string)
-      - possibly other lint-related flags if needed
+      - args.bump (str or None)
+      - args.set_ver (str or None)
+      - args.commit_msg (str)
+      - args.lint_fix (bool) -- whether to auto-fix lint errors
+      - args.lint_no_exit (bool) -- whether to NOT exit on lint errors
+      ... plus other flags.
     """
 
     # --------------------------------------------------
@@ -43,12 +44,12 @@ def run_prepare(args: Any) -> None:
     # --------------------------------------------------
     # 2. Lint + autofix
     # --------------------------------------------------
-    # For demonstration, let's lint exactly one directory. 
-    # If you want to lint multiple subdirectories, adapt accordingly.
     lint_dir = args.directory or "."
-    # If you want to exit on lint errors, set exit_on_error=True below.
-    # Here, let's keep it false so we can proceed to commit anyway.
-    run_ruff_lint(directories=[lint_dir], fix=True, exit_on_error=False)
+    # Use the new CLI flags to determine lint behavior:
+    lint_fix = args.lint_fix  # defaults to False if not set
+    exit_on_error = not args.lint_no_exit  # if --lint-no-exit is set, then exit_on_error is False
+
+    run_ruff_lint(directories=[lint_dir], fix=lint_fix, exit_on_error=exit_on_error)
 
     # --------------------------------------------------
     # 3. Git commit
@@ -57,7 +58,6 @@ def run_prepare(args: Any) -> None:
     success = git_commit_all_changes(commit_msg)
     if not success:
         print("[prepare] Git commit failed or there were no changes to commit.")
-        # Decide whether to sys.exit(1) or just log and proceed
-        # sys.exit(1)
+        # Optionally, handle the failure (e.g., sys.exit(1))
 
     print("[prepare] Complete.")

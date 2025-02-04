@@ -37,7 +37,11 @@ def run_pytests(
         cmd.extend([
             "-n", 
             str(num_workers), 
-            "--dist=loadfile"
+            "--dist=loadfile",
+            "--dist=loadfile", 
+            "--tb=short", 
+            "--json-report", 
+            "--json-report-file=pytest_results.json"
             ])
     print(f"[test_ops] Running tests in {test_directory} -> {' '.join(cmd)}")
 
@@ -163,12 +167,32 @@ def run_tests_with_mode(
         else:
             # Non-aggregator => we test each discovered pyproject in subdirs individually
             print("[test_ops] No aggregator found. We'll test each discovered pyproject in subdirs individually.")
-            for pyproj in pyprojects:
-                proj_dir = os.path.dirname(pyproj)
-                r = run_pytests(proj_dir, num_workers)
+            # 1) Test local path dependencies
+            deps = extract_path_dependencies(primary_pyproj)
+            base_dir = os.path.dirname(primary_pyproj)
+
+            for dep_rel_path in deps:
+                subpkg_path = os.path.join(base_dir, dep_rel_path)
+                if not os.path.isdir(subpkg_path):
+                    print(f"  Skipping invalid subpackage dir: {subpkg_path}", file=sys.stderr)
+                    all_passed = False
+                    continue
+                r = run_pytests(subpkg_path, num_workers)
                 details.append(r)
                 if not r["success"]:
                     all_passed = False
+
+            # NEW: 2) Test Git-based dependencies
+            git_deps = extract_git_dependencies(primary_pyproj)
+            if git_deps:
+                # We'll clone them into a single temp folder,
+                # run tests in each subdirectory that has a pyproject.toml.
+                git_ok, git_tmp_dir = _test_git_deps(git_deps, details, num_workers, cleanup)
+                if not git_ok:
+                    all_passed = False
+                    
+                if git_tmp_dir is not None:
+                    git_temp_dir = git_tmp_dir
 
         return {"success": all_passed, "details": details, "git_temp_dir": git_temp_dir}
 

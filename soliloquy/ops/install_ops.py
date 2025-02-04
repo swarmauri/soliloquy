@@ -45,9 +45,11 @@ def install_packages(
         if is_aggregator:
             print(f"  Detected aggregator '{pkg_name}' (package-mode=false). Skipping aggregator install.")
             # Instead, install each local path dependency
-            success = _run_poetry_install(pyproj_path, extras=True)
+            proj_dir = os.path.dirname(pyproj_path)  # Use the directory instead of the file path
+            success = _run_poetry_install(proj_dir, extras=True)
             if not success:
                 overall_success = False
+
         else:
             # Normal package => install it
             print(f"  Detected normal package '{pkg_name}'. Installing ...")

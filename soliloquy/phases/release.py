@@ -17,15 +17,12 @@ def run_release(args: Any) -> None:
     """
     The 'release' phase:
       - Validate (test-only, in user-specified mode)
-      - If mode != 'each':
-          * If tests pass, build + publish, but DO NOT update aggregator or any local pyprojects.
-      - If mode == 'each':
-          * Only update the cloned/temporary subpackages inside the git_temp_dir,
-            removing 'git', 'branch', 'subdirectory', 'path', but preserving 'optional'
-            and setting normal version constraints.
-          * Build/publish only subdirectories that passed tests.
-          * Partial success on remote updates is allowed; failing updates won't block
-            the rest from building/publishing.
+      - Perform remote_update_bulk (to update references in pyproject.toml).
+      - Build + publish, in different ways depending on mode.
+
+    Changes to fix the remote_update_bulk call in single/monorepo mode:
+      - If mode != 'each', also call remote_update_bulk on the local file/directory 
+        (not just the aggregator in a Git clone).
     """
 
     print("[release] Running validation (test only).")
@@ -40,16 +37,32 @@ def run_release(args: Any) -> None:
     git_temp_dir = test_results.get("git_temp_dir")
 
     # ------------------------------------------------------------------
-    # For single/monorepo mode: if tests fail => stop; if pass => build & publish
-    # BUT do NOT do any remote update on aggregator or local pyprojects.
+    # SINGLE / MONOREPO MODE
     # ------------------------------------------------------------------
     if test_mode != "each":
         if not overall_success:
             print(f"[release] Tests failed in '{test_mode}' mode. Exiting.", file=sys.stderr)
             sys.exit(1)
 
+        # ====== NEW: Perform remote update on local file/directory ======
+        print("[release] Tests passed. Performing remote update on local pyproject(s)...")
+        ru_result = remote_update_bulk(
+            file=args.file,
+            directory=args.directory,
+            recursive=args.recursive,
+            output=None  # In-place update
+        )
+
+        if not ru_result["overall_success"]:
+            print("[release] Some remote updates failed, continuing with build/publish.")
+            for file_result in ru_result["results"]:
+                if not file_result["success"]:
+                    print(f"    - Update failed for {file_result['file']}: {file_result['error']}", file=sys.stderr)
+        else:
+            print("[release] All remote updates succeeded in local pyproject(s).")
+
         # Build
-        print("[release] Tests passed. Building packages ...")
+        print("[release] Building packages ...")
         build_ok = build_packages(
             file=args.file,
             directory=args.directory,
@@ -60,7 +73,7 @@ def run_release(args: Any) -> None:
             sys.exit(1)
 
         # Publish
-        print("[release] Publishing packages (no remote update in single/monorepo mode)...")
+        print("[release] Publishing packages ...")
         repository = getattr(args, "repository", None)
         pub_ok = publish_packages(
             file=args.file,
@@ -78,10 +91,7 @@ def run_release(args: Any) -> None:
         return
 
     # ------------------------------------------------------------------
-    # If test_mode == 'each':
-    #   * Possibly aggregator-based. We skip aggregator updates.
-    #   * Only update pyproject.toml's in the temporary Git clones (git_temp_dir).
-    #   * Then build/publish only subdirectories that actually passed tests.
+    # EACH MODE
     # ------------------------------------------------------------------
     if not details:
         print("[release] No test details found in 'each' mode. Exiting.", file=sys.stderr)
@@ -103,17 +113,12 @@ def run_release(args: Any) -> None:
     #    Partial failures do not block the rest of the release. We simply log them.
     if git_temp_dir:
         print(f"[release] Performing remote update on cloned Git dependencies at: {git_temp_dir}")
-
         ru_result = remote_update_bulk(
             file=None,
             directory=git_temp_dir,
             recursive=True,
             output=None  # In-place in the temp folder
         )
-        # ru_result is expected to look like:
-        #   {"overall_success": bool, "results": [{"file": ..., "success": bool, "error": ...}, ...]}
-
-        # If *some* updates fail, we log them but do not exit:
         if not ru_result["overall_success"]:
             print("[release] Some remote updates failed, but continuing with build/publish.")
             for file_result in ru_result["results"]:
@@ -123,14 +128,13 @@ def run_release(args: Any) -> None:
         else:
             print("[release] All remote updates succeeded in the temporary directory.")
     else:
-        # If there's no git_temp_dir, we do nothing here. We skip aggregator updates on purpose.
         print("[release] No temporary Git clone directory found. Skipping remote update of aggregator or local repos.")
 
-    # 2) Build & Publish only the subpackages that passed tests. Each `passed_dirs` item is
-    #    the absolute path where tests were run. (Likely inside git_temp_dir if cloned).
-    #    Skip aggregator if aggregator is in the passed_dirs list (i.e., aggregator is not published).
+    # 2) Build & Publish only the subpackages that passed tests. 
+    #    (Likely subpackages in the cloned git_temp_dir).
     overall_publish_success = True
     for sub_dir in passed_dirs:
+        # If aggregator, skip building/publishing aggregator
         if is_agg and os.path.abspath(sub_dir) == os.path.dirname(aggregator_pyproj):
             print(f"[release] Skipping aggregator dir {sub_dir} for build/publish.")
             continue
@@ -146,7 +150,7 @@ def run_release(args: Any) -> None:
         # Publish
         print(f"[release] Publishing subpackage: {sub_dir}")
         publish_cmd = ["poetry", "publish", "-vv"]
-        uname = "__token__"  # Typically used if you're passing a token
+        uname = "__token__"  # Typically used if passing a token
         pwd = getattr(args, "publish_password", None)
 
         publish_cmd.extend(["--username", uname])

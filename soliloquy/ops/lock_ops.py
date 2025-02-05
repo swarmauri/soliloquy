@@ -69,7 +69,7 @@ def _run_poetry_lock(pyproj_file: str) -> bool:
     Run 'poetry lock' in the same directory as pyproj_file.
     """
     proj_dir = os.path.dirname(pyproj_file)
-    cmd = ["poetry", "lock"]
+    cmd = ["poetry", "lock", "--regenerate"]
     print(f"    Running: {' '.join(cmd)} (cwd={proj_dir})")
     rc = run_command(cmd, cwd=proj_dir)
     if rc != 0:

@@ -79,7 +79,7 @@ def run_release(args: Any) -> None:
             file=args.file,
             directory=args.directory,
             recursive=args.recursive,
-            username=getattr(args, "publish_username", None),
+            username="__token__",
             password=getattr(args, "publish_password", None),
             repository=repository
         )

@@ -141,9 +141,13 @@ def run_release(args: Any) -> None:
 
         # Build
         print(f"\n[release] Building subpackage: {sub_dir}")
-        build_rc = run_command(["poetry", "build"], cwd=sub_dir)
+        build_rc, out_build, err_build = run_command(["poetry", "build"], cwd=sub_dir)
         if build_rc != 0:
             print(f"[release] Build failed in {sub_dir}", file=sys.stderr)
+            if out_build:
+                print(f"STDOUT: {out_build}")
+            if err_build:
+                print(f"STDERR: {err_build}", file=sys.stderr)
             overall_publish_success = False
             continue
 
@@ -157,9 +161,13 @@ def run_release(args: Any) -> None:
         if pwd:
             publish_cmd.extend(["--password", pwd])
 
-        pub_rc = run_command(publish_cmd, cwd=sub_dir)
+        pub_rc, out_pub, err_pub = run_command(publish_cmd, cwd=sub_dir)
         if pub_rc != 0:
             print(f"[release] Publish failed in {sub_dir}", file=sys.stderr)
+            if out_pub:
+                print(f"STDOUT: {out_pub}")
+            if err_pub:
+                print(f"STDERR: {err_pub}", file=sys.stderr)
             overall_publish_success = False
 
     if not overall_publish_success:

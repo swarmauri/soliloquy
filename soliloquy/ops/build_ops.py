@@ -6,7 +6,7 @@ from typing import Optional, List
 
 import tomlkit
 from soliloquy.ops.pyproject_ops import find_pyproject_files, extract_path_dependencies
-from soliloquy.ops.poetry_utils import run_command  # A helper that calls subprocess
+from soliloquy.ops.poetry_utils import run_command  # Updated run_command returns (rc, stdout, stderr)
 
 def build_packages(
     file: Optional[str] = None,
@@ -121,8 +121,12 @@ def _run_poetry_build(package_dir: str) -> bool:
     cmd = ["poetry", "build"]
     print(f"      Running: {' '.join(cmd)} (cwd={package_dir})")
 
-    rc = run_command(cmd, cwd=package_dir)
+    rc, out, err = run_command(cmd, cwd=package_dir)
     if rc != 0:
         print(f"      Build failed in {package_dir} (exit code {rc}).", file=sys.stderr)
+        if out:
+            print(f"      STDOUT: {out}")
+        if err:
+            print(f"      STDERR: {err}", file=sys.stderr)
         return False
     return True

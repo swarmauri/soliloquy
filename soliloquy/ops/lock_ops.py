@@ -71,9 +71,14 @@ def _run_poetry_lock(pyproj_file: str) -> bool:
     proj_dir = os.path.dirname(pyproj_file)
     cmd = ["poetry", "lock", "--regenerate"]
     print(f"    Running: {' '.join(cmd)} (cwd={proj_dir})")
-    rc = run_command(cmd, cwd=proj_dir)
+    
+    rc, out, err = run_command(cmd, cwd=proj_dir)
     if rc != 0:
-        print(f"    [lock_ops] 'poetry lock' failed in {proj_dir}.", file=sys.stderr)
+        print(f"    [lock_ops] 'poetry lock' failed in {proj_dir} (exit code {rc}).", file=sys.stderr)
+        if out:
+            print(f"    STDOUT: {out}")
+        if err:
+            print(f"    STDERR: {err}", file=sys.stderr)
         return False
     return True
 

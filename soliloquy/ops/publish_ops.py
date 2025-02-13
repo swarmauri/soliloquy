@@ -6,8 +6,7 @@ import tomlkit
 from typing import Optional
 
 from soliloquy.ops.pyproject_ops import find_pyproject_files, extract_path_dependencies
-from soliloquy.ops.poetry_utils import run_command  # or use subprocess directly
-
+from soliloquy.ops.poetry_utils import run_command  # New run_command returns (rc, stdout, stderr)
 
 def publish_packages(
     file: Optional[str] = None,
@@ -129,14 +128,18 @@ def _build_and_publish(
     """
     package_dir = os.path.dirname(pyproj_file)
     print(f"  Building package in {package_dir} ...")
-    rc_build = run_command(["poetry", "build"], cwd=package_dir)
+    rc_build, out_build, err_build = run_command(["poetry", "build"], cwd=package_dir)
     if rc_build != 0:
-        print(f"  [publish_ops] Build failed in {package_dir}.", file=sys.stderr)
+        print(f"  [publish_ops] Build failed in {package_dir} (exit code {rc_build}).", file=sys.stderr)
+        if out_build:
+            print(f"  STDOUT: {out_build}")
+        if err_build:
+            print(f"  STDERR: {err_build}", file=sys.stderr)
         return False
 
     print(f"  Publishing package from {package_dir} ...")
     cmd = ["poetry", "publish"]
-    # If we want verbose output, we might do cmd.append("-vv").
+    # Optionally add verbose flag: cmd.append("-vv")
 
     if username:
         cmd.extend(["--username", username])
@@ -145,9 +148,13 @@ def _build_and_publish(
     if repository:
         cmd.extend(["--repository", repository])
 
-    rc_publish = run_command(cmd, cwd=package_dir)
+    rc_publish, out_publish, err_publish = run_command(cmd, cwd=package_dir)
     if rc_publish != 0:
-        print(f"  [publish_ops] Publish failed in {package_dir} (exit={rc_publish}).", file=sys.stderr)
+        print(f"  [publish_ops] Publish failed in {package_dir} (exit code {rc_publish}).", file=sys.stderr)
+        if out_publish:
+            print(f"  STDOUT: {out_publish}")
+        if err_publish:
+            print(f"  STDERR: {err_publish}", file=sys.stderr)
         return False
 
     return True

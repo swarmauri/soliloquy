@@ -2,7 +2,6 @@
 
 import os
 import sys
-import subprocess
 import tempfile
 import shutil
 from typing import Dict, List, Union, Tuple, Optional
@@ -14,7 +13,7 @@ from soliloquy.ops.pyproject_ops import (
     extract_path_dependencies,
     extract_git_dependencies
 )
-from soliloquy.ops.poetry_utils import run_command  # For uniform command calls, if desired
+from soliloquy.ops.poetry_utils import run_command  # New run_command returns (rc, stdout, stderr)
 
 
 def run_pytests(
@@ -42,13 +41,11 @@ def run_pytests(
             "--tb=short", 
             "--json-report", 
             "--json-report-file=pytest_results.json"
-            ])
+        ])
     print(f"[test_ops] Running tests in {test_directory} -> {' '.join(cmd)}")
-
-    # Here we directly call subprocess, but you could also use run_command(...) if desired.
-    proc = subprocess.run(cmd, cwd=test_directory)
-    rc = proc.returncode
-
+    
+    rc, out, err = run_command(cmd, cwd=test_directory)
+    # Optionally, you could print 'out' and 'err' for debugging.
     return {
         "success": (rc == 0),
         "returncode": rc,
@@ -151,11 +148,10 @@ def run_tests_with_mode(
                 if not r["success"]:
                     all_passed = False
 
-            # NEW: 2) Test Git-based dependencies
+            # 2) Test Git-based dependencies
             git_deps = extract_git_dependencies(primary_pyproj)
             if git_deps:
-                # We'll clone them into a single temp folder,
-                # run tests in each subdirectory that has a pyproject.toml.
+                # Clone them into a temporary folder and test each subdirectory that has a pyproject.toml.
                 git_ok, git_tmp_dir = _test_git_deps(git_deps, details, num_workers, cleanup)
                 if not git_ok:
                     all_passed = False
@@ -163,9 +159,8 @@ def run_tests_with_mode(
                 if git_tmp_dir is not None:
                     git_temp_dir = git_tmp_dir
 
-
         else:
-            # Non-aggregator => we test each discovered pyproject in subdirs individually
+            # Non-aggregator => test each discovered pyproject in subdirectories individually
             print("[test_ops] No aggregator found. We'll test each discovered pyproject in subdirs individually.")
             # 1) Test local path dependencies
             deps = extract_path_dependencies(primary_pyproj)
@@ -182,11 +177,9 @@ def run_tests_with_mode(
                 if not r["success"]:
                     all_passed = False
 
-            # NEW: 2) Test Git-based dependencies
+            # 2) Test Git-based dependencies
             git_deps = extract_git_dependencies(primary_pyproj)
             if git_deps:
-                # We'll clone them into a single temp folder,
-                # run tests in each subdirectory that has a pyproject.toml.
                 git_ok, git_tmp_dir = _test_git_deps(git_deps, details, num_workers, cleanup)
                 if not git_ok:
                     all_passed = False
@@ -210,7 +203,6 @@ def _check_if_aggregator(pyproj_path: str) -> (bool, str):
 
     pkg_mode = poetry_table.get("package-mode", True)
     if isinstance(pkg_mode, str):
-        # if "false" as string => aggregator
         pkg_mode = (pkg_mode.lower() != "false")
 
     is_aggregator = (pkg_mode is False)
@@ -267,7 +259,7 @@ def _test_git_deps(
                 git_url,
                 clone_dir
             ]
-            rc = run_command(clone_cmd)
+            rc, out, err = run_command(clone_cmd)
             if rc != 0:
                 print(f"  [test_ops] Failed to clone {git_url}. Skipping these sub-pkgs.", file=sys.stderr)
                 all_passed = False
@@ -275,7 +267,7 @@ def _test_git_deps(
 
             # For each subdirectory in that repo, do a test run
             for (dep_name, subdir) in sub_pkgs:
-                test_path = os.path.join(clone_dir, *subdir.split("/"))  # ensure cross-platform
+                test_path = os.path.join(clone_dir, *subdir.split("/"))  # Ensure cross-platform compatibility
                 pyproj_file = os.path.join(test_path, "pyproject.toml")
                 if not os.path.isdir(test_path):
                     print(f"  [test_ops][{dep_name}] Subdirectory '{subdir}' not found.", file=sys.stderr)

@@ -2,20 +2,24 @@
 
 import subprocess
 import sys
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
-def run_command(cmd: List[str], cwd: Optional[str] = None) -> int:
+def run_command(cmd: List[str], cwd: Optional[str] = None) -> Tuple[int, str, str]:
     """
     Runs the given command in the specified working directory.
-    Returns the integer exit code (0 indicates success).
 
+    Returns:
+        A tuple (returncode, stdout, stderr) where:
+            - returncode (int): The command's exit code (0 indicates success).
+            - stdout (str): Captured standard output.
+            - stderr (str): Captured standard error.
+    
     We mask any PyPI tokens that start with 'pypi-' when printing.
     """
-    # Build a safe-to-print version of the command, masking pypi- tokens
+    # Build a safe-to-print version of the command, masking pypi- tokens.
     safe_cmd = []
-    for idx, arg in enumerate(cmd):
+    for arg in cmd:
         if arg.startswith("pypi-"):
-            # Mask the token
             safe_cmd.append("pypi-****")
         else:
             safe_cmd.append(arg)
@@ -30,7 +34,8 @@ def run_command(cmd: List[str], cwd: Optional[str] = None) -> int:
             capture_output=True,
             shell=False
         )
-        return process.returncode
+        return process.returncode, process.stdout, process.stderr
     except Exception as e:
-        print(f"[poetry_utils] Error running command {cmd}: {e}", file=sys.stderr)
-        return 1
+        error_msg = f"Error running command {cmd}: {e}"
+        print(f"[poetry_utils] {error_msg}", file=sys.stderr)
+        return 1, "", error_msg

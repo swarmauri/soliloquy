@@ -95,8 +95,12 @@ def _run_poetry_install(package_dir: str, extras: bool = True) -> bool:
         cmd.append("--all-extras")
     print(f"      Running: {' '.join(cmd)} (cwd={package_dir})")
 
-    rc = run_command(cmd, cwd=package_dir)
+    rc, out, err = run_command(cmd, cwd=package_dir)
     if rc != 0:
         print(f"      Install failed in {package_dir} (exit code {rc}).", file=sys.stderr)
+        if out:
+            print(f"      STDOUT: {out}")
+        if err:
+            print(f"      STDERR: {err}", file=sys.stderr)
         return False
     return True

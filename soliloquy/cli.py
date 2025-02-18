@@ -97,7 +97,13 @@ def main():
     elif args.command == "install":
         run_install(args)
     elif args.command == "validate":
-        run_validate(args)
+        results = run_validate(args)
+        # Exit with non-zero code if validation failed.
+        if not results.get("success", False):
+            print("[validate] Exiting with failure status for CI detection.")
+            exit(1)
+        else:
+            exit(0)
     elif args.command == "release":
         run_release(args)
     else:
